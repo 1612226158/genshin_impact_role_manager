@@ -1,0 +1,629 @@
+<script setup>
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import ElementBadge from '@/components/ElementBadge.vue'
+import { useCharacterStore } from '@/stores/character'
+import { useAlbumStore } from '@/stores/album'
+import { useToastStore } from '@/stores/toast'
+import { assetUrl } from '@/utils/asset'
+import { elementColor } from '@/utils/element'
+
+const route = useRoute()
+const router = useRouter()
+const store = useCharacterStore()
+const album = useAlbumStore()
+const toast = useToastStore()
+
+const tab = ref('stats')
+
+const character = computed(() => store.get(route.params.id))
+
+const paintings = computed(() => character.value?.images?.paintings || [])
+const activePainting = ref(0)
+
+watch(
+  () => route.params.id,
+  () => {
+    activePainting.value = 0
+    tab.value = 'stats'
+  }
+)
+
+const paintingSrc = computed(() => assetUrl(paintings.value[activePainting.value]?.file || ''))
+
+const idx = computed(() => store.all.findIndex((c) => String(c.id) === String(route.params.id)))
+const prev = computed(() => (idx.value > 0 ? store.all[idx.value - 1] : null))
+const next = computed(() =>
+  idx.value >= 0 && idx.value < store.all.length - 1 ? store.all[idx.value + 1] : null
+)
+
+const elColor = computed(() => elementColor(character.value?.element))
+
+const statRows = computed(() => {
+  const c = character.value
+  if (!c) return []
+  return [
+    { k: '国度', v: c.nation || '—' },
+    { k: '所属', v: c.affiliation || '—' },
+    { k: '元素', v: c.element || '—' },
+    { k: '武器', v: c.weapon || '—' },
+    { k: '星级', v: c.star ? `${c.star} 星` : '—' },
+    { k: '生日', v: c.birthday || '—' },
+    { k: '命之座', v: c.constellation || '—' },
+    { k: '定位', v: c.role || '—' },
+  ]
+})
+
+const cvRows = computed(() => {
+  const cv = character.value?.cv || {}
+  return [
+    { k: '中', v: cv['中'] },
+    { k: '日', v: cv['日'] },
+    { k: '英', v: cv['英'] },
+    { k: '韩', v: cv['韩'] },
+  ].filter((r) => r.v)
+})
+
+const storySections = computed(() => character.value?.story?.sections || [])
+const albumItems = computed(() => album.byCharacter(route.params.id))
+
+const collected = computed(() => {
+  const c = character.value
+  if (!c || !paintings.value.length) return false
+  return paintings.value.every((p) => album.isCollected(c.id, p.file))
+})
+
+function toggleCollect() {
+  const c = character.value
+  if (!c) return
+  if (!paintings.value.length) {
+    toast.warn('该角色没有可收藏的立绘')
+    return
+  }
+  if (collected.value) {
+    paintings.value.forEach((p) => album.uncollect(c.id, p.file))
+    toast.push('已从相册移除')
+  } else {
+    let n = 0
+    paintings.value.forEach((p) => {
+      if (album.collect({ characterId: c.id, characterName: c.name, painting: p })) n += 1
+    })
+    toast.ok(n ? `已收藏 ${n} 张立绘` : '该立绘已在相册中')
+  }
+}
+
+function go(id) {
+  if (id) router.push(`/c/${id}`)
+}
+</script>
+
+<template>
+  <div v-if="character" class="detail">
+    <div
+      class="aura"
+      :style="{ background: `radial-gradient(60% 55% at 42% 45%, ${elColor}33, transparent 70%)` }"
+      aria-hidden="true"
+    />
+
+    <header class="dhead">
+      <button type="button" class="back" aria-label="返回角色库" @click="router.push('/')">←</button>
+      <ElementBadge :element="character.element" size="sm" />
+      <span class="crumb">{{ character.nation }} / {{ character.name }}</span>
+      <div class="navs">
+        <button type="button" :disabled="!prev" @click="go(prev?.id)">‹ {{ prev?.name || '' }}</button>
+        <button type="button" :disabled="!next" @click="go(next?.id)">{{ next?.name || '' }} ›</button>
+      </div>
+    </header>
+
+    <div class="body">
+      <!-- 左侧竖向菜单 -->
+      <nav class="tabs" aria-label="角色分区">
+        <button type="button" :class="{ on: tab === 'stats' }" @click="tab = 'stats'">属性</button>
+        <button type="button" :class="{ on: tab === 'story' }" @click="tab = 'story'">背景故事</button>
+        <button type="button" :class="{ on: tab === 'album' }" @click="tab = 'album'">
+          相册 <em v-if="albumItems.length">{{ albumItems.length }}</em>
+        </button>
+      </nav>
+
+      <!-- 中央立绘 -->
+      <div class="stage">
+        <div class="poster" :class="{ 'no-art': !paintingSrc }">
+          <img v-if="paintingSrc" :src="paintingSrc" :alt="`${character.name} 立绘`" />
+          <div v-else class="poster-empty">
+            <span>官方未提供立绘</span>
+          </div>
+        </div>
+
+        <div v-if="paintings.length > 1" class="thumbs">
+          <button
+            v-for="(p, i) in paintings"
+            :key="p.file"
+            type="button"
+            class="thumb"
+            :class="{ on: i === activePainting }"
+            @click="activePainting = i"
+          >
+            <img :src="assetUrl(p.file)" :alt="p.label || `立绘 ${i + 1}`" />
+          </button>
+        </div>
+      </div>
+
+      <!-- 右侧信息 -->
+      <aside class="side">
+        <div class="name-row">
+          <h1>{{ character.name }}</h1>
+          <span v-if="character.variant" class="variant">{{ character.variant }}</span>
+        </div>
+        <p class="title">{{ character.title || '—' }}</p>
+        <p class="stars" :aria-label="`${character.star || 0} 星`">
+          {{ '★'.repeat(character.star || 0) }}
+        </p>
+
+        <div class="rule"></div>
+
+        <template v-if="tab === 'stats'">
+          <dl class="stats">
+            <div v-for="r in statRows" :key="r.k">
+              <dt>{{ r.k }}</dt>
+              <dd>{{ r.v }}</dd>
+            </div>
+          </dl>
+
+          <div v-if="cvRows.length" class="cv">
+            <p class="cv-title">配音</p>
+            <div v-for="r in cvRows" :key="r.k" class="cv-row">
+              <span class="cv-lang">{{ r.k }}</span>
+              <span class="cv-name">{{ r.v }}</span>
+            </div>
+          </div>
+
+          <p v-if="character.source" class="src">
+            <a :href="character.source" target="_blank" rel="noopener noreferrer">数据来源</a>
+          </p>
+        </template>
+
+        <template v-else-if="tab === 'story'">
+          <div v-if="storySections.length" class="story">
+            <section v-for="(s, i) in storySections" :key="i">
+              <h3>{{ s.section }}</h3>
+              <p>{{ s.text }}</p>
+            </section>
+          </div>
+          <p v-else class="empty-story">官方未提供背景故事文本。</p>
+        </template>
+
+        <template v-else>
+          <div v-if="albumItems.length" class="album-list">
+            <div v-for="it in albumItems" :key="it.aid" class="album-item">
+              <span>{{ it.title || it.label || '立绘' }}</span>
+              <span class="album-kind">{{ it.kind === 'official' ? '收藏' : it.kind }}</span>
+            </div>
+          </div>
+          <p v-else class="empty-story">还没有收藏这个角色的立绘。</p>
+        </template>
+
+        <div class="actions">
+          <button type="button" class="gs-btn" :class="{ primary: !collected }" @click="toggleCollect">
+            {{ collected ? '已加入相册 ✓' : '加入相册' }}
+          </button>
+          <button type="button" class="gs-btn" @click="router.push(`/c/${character.id}/edit`)">
+            编辑
+          </button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div v-else class="page">
+    <div class="missing gs-panel">
+      <p>未找到该角色，可能已被删除。</p>
+      <button type="button" class="gs-btn" @click="router.push('/')">返回角色库</button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.detail {
+  position: relative;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 14px 28px 60px;
+}
+
+.aura {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dhead {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 14px;
+  border-bottom: 1px solid var(--gs-line);
+}
+
+.back {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--gs-line);
+  color: var(--gs-ink-2);
+  transition: all 0.18s var(--gs-ease);
+}
+
+.back:hover {
+  border-color: var(--gs-gold);
+  color: var(--gs-gold-hi);
+}
+
+.crumb {
+  font-size: 13px;
+  color: var(--gs-ink-2);
+  letter-spacing: 0.04em;
+}
+
+.navs {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.navs button {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--gs-line);
+  font-size: 12px;
+  color: var(--gs-ink-3);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.18s var(--gs-ease);
+}
+
+.navs button:hover:not(:disabled) {
+  color: var(--gs-gold-hi);
+  border-color: var(--gs-line-hi);
+}
+
+.navs button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.body {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) 380px;
+  gap: 24px;
+  padding-top: 18px;
+  align-items: start;
+}
+
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 16px;
+}
+
+.tabs button {
+  position: relative;
+  text-align: left;
+  padding: 10px 10px 10px 18px;
+  font-size: 14px;
+  color: var(--gs-ink-3);
+  letter-spacing: 0.1em;
+  transition: color 0.18s var(--gs-ease);
+}
+
+.tabs button::before {
+  content: '◇';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.6);
+  color: var(--gs-gold-deep);
+  opacity: 0;
+  transition: all 0.18s var(--gs-ease);
+}
+
+.tabs button:hover {
+  color: var(--gs-ink-2);
+}
+
+.tabs button.on {
+  color: var(--gs-gold-hi);
+}
+
+.tabs button.on::before {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.tabs em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--gs-gold-deep);
+  margin-left: 4px;
+}
+
+.stage {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.poster {
+  position: relative;
+  width: 100%;
+  max-height: calc(100vh - 210px);
+  display: flex;
+  justify-content: center;
+}
+
+.poster img {
+  max-height: calc(100vh - 210px);
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5);
+  /* 立绘为官方海报，边缘加一层金色细边压住浅色底 */
+  outline: 1px solid rgba(211, 188, 142, 0.28);
+  outline-offset: -1px;
+}
+
+.poster-empty {
+  width: 100%;
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--gs-line-hi);
+  border-radius: var(--gs-radius-panel);
+  color: var(--gs-ink-3);
+  font-size: 13px;
+}
+
+.thumbs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.thumb {
+  width: 46px;
+  height: 62px;
+  padding: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--gs-line);
+  opacity: 0.65;
+  transition: all 0.18s var(--gs-ease);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb.on,
+.thumb:hover {
+  opacity: 1;
+  border-color: var(--gs-gold);
+}
+
+.side {
+  padding: 8px 4px 0;
+}
+
+.name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.side h1 {
+  font-size: 30px;
+  letter-spacing: 0.06em;
+  color: var(--gs-ink);
+}
+
+.variant {
+  font-size: 12px;
+  color: var(--gs-ink-3);
+}
+
+.title {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--gs-gold);
+  letter-spacing: 0.18em;
+}
+
+.stars {
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--gs-gold);
+}
+
+.rule {
+  height: 1px;
+  margin: 16px 0 14px;
+  background: linear-gradient(90deg, var(--gs-line-hi), transparent 70%);
+}
+
+.stats {
+  display: grid;
+  gap: 0;
+}
+
+.stats div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 2px;
+  border-bottom: 1px dashed rgba(211, 188, 142, 0.12);
+}
+
+.stats dt {
+  width: 62px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--gs-ink-3);
+  letter-spacing: 0.06em;
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--gs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.cv {
+  margin-top: 16px;
+}
+
+.cv-title {
+  font-size: 11px;
+  color: var(--gs-gold-deep);
+  letter-spacing: 0.2em;
+  margin-bottom: 6px;
+}
+
+.cv-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 12.5px;
+}
+
+.cv-lang {
+  width: 18px;
+  color: var(--gs-ink-3);
+}
+
+.cv-name {
+  color: var(--gs-ink-2);
+}
+
+.src {
+  margin-top: 14px;
+  font-size: 11.5px;
+}
+
+.story section {
+  margin-bottom: 18px;
+}
+
+.story h3 {
+  font-size: 13.5px;
+  color: var(--gs-gold);
+  letter-spacing: 0.1em;
+  padding-left: 10px;
+  border-left: 2px solid var(--gs-gold-deep);
+  margin-bottom: 8px;
+}
+
+.story p {
+  font-size: 13.5px;
+  line-height: 1.95;
+  color: var(--gs-ink-2);
+  white-space: pre-wrap;
+}
+
+.empty-story {
+  font-size: 13px;
+  color: var(--gs-ink-3);
+  padding: 20px 0;
+}
+
+.album-list {
+  display: grid;
+  gap: 6px;
+}
+
+.album-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid var(--gs-line);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--gs-ink-2);
+}
+
+.album-kind {
+  color: var(--gs-gold-deep);
+  font-size: 11px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.actions .gs-btn {
+  flex: 1;
+}
+
+.missing {
+  padding: 50px 24px;
+  text-align: center;
+  color: var(--gs-ink-2);
+}
+
+.missing .gs-btn {
+  margin-top: 16px;
+}
+
+@media (max-width: 1200px) {
+  .body {
+    grid-template-columns: 84px minmax(0, 1fr) 320px;
+    gap: 16px;
+  }
+  .side h1 {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 900px) {
+  .detail {
+    padding: 12px 14px 50px;
+  }
+  .body {
+    grid-template-columns: 1fr;
+  }
+  .tabs {
+    flex-direction: row;
+    padding-top: 0;
+    border-bottom: 1px solid var(--gs-line);
+  }
+  .tabs button {
+    padding: 8px 10px;
+  }
+  .tabs button::before {
+    display: none;
+  }
+  .poster,
+  .poster img {
+    max-height: 58vh;
+  }
+  .navs {
+    display: none;
+  }
+}
+</style>

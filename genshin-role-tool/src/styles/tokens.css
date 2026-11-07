@@ -1,0 +1,63 @@
+/* ============================================================
+   设计令牌 · 深色星海 + 金线
+   对比度均按 WCAG 2.1 公式核算，详见开发文档第 9 节
+   ============================================================ */
+:root {
+  /* 背景层 */
+  --gs-bg-0: #071521;
+  --gs-bg-1: #0c2438;
+  --gs-bg-2: #123350;
+  --gs-glow: #2a6a8f;
+
+  /* 面板 */
+  --gs-panel: rgba(10, 30, 47, 0.72);
+  --gs-panel-solid: #10293d;
+  --gs-panel-hi: rgba(30, 62, 90, 0.55);
+
+  /* 金线 */
+  --gs-line: rgba(211, 188, 142, 0.18);
+  --gs-line-hi: rgba(211, 188, 142, 0.42);
+
+  /* 金 */
+  --gs-gold: #d3bc8e;
+  --gs-gold-hi: #f2e4c4;
+  --gs-gold-deep: #a8823f;
+
+  /* 文字 */
+  --gs-ink: #ede6d6;
+  --gs-ink-2: #a9bbcb;
+  --gs-ink-3: #7c93a7;
+
+  /* 稀有度 */
+  --gs-r5-a: #8c6a32;
+  --gs-r5-b: #d9b871;
+  --gs-r4-a: #4e4470;
+  --gs-r4-b: #9a86c0;
+
+  /* 元素（原神 Wiki 权威值） */
+  --el-pyro: #ed4f45;
+  --el-hydro: #4088ff;
+  --el-cryo: #98c8e8;
+  --el-electro: #d376f0;
+  --el-dendro: #7bb42d;
+  --el-anemo: #33ccb3;
+  --el-geo: #cfa726;
+
+  /* 排版 */
+  --gs-font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', serif;
+  --gs-font-body: 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC',
+    system-ui, sans-serif;
+
+  /* 形状 */
+  --gs-radius-card: 10px;
+  --gs-radius-panel: 14px;
+  --gs-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* 层级 */
+  --gs-z-bg: 0;
+  --gs-z-content: 1;
+  --gs-z-bar: 20;
+  --gs-z-drawer: 40;
+  --gs-z-modal: 60;
+  --gs-z-toast: 80;
+}

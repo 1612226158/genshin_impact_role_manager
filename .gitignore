@@ -1,0 +1,15 @@
+# 依赖与产物
+node_modules/
+dist/
+
+# 原始素材（体积过大，仓库内使用转换后的 WebP，见 genshin-role-tool/public/assets/）
+/assets/
+/原神-开发素材.zip
+
+# 本机工具数据
+.workbuddy/
+
+# 系统与日志
+*.log
+.DS_Store
+Thumbs.db
