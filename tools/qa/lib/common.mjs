@@ -83,7 +83,12 @@ export async function waitAssets(page, cap = 8000) {
  * 一律用 waitForFunction；页内点击用「evaluate 内自轮询等元素」模式。
  */
 export async function openRoute(page, base, path, { timeoutMs = 20000 } = {}) {
-  await page.goto(`${base}/?_n=${Date.now()}${path}`, {
+  // path 可能自带查询串（如 /?flat=1#/），把去重参数并入已有 query 而不是另起一个 ?
+  const qi = path.indexOf('?')
+  const p0 = qi === -1 ? path : path.slice(0, qi)
+  const rest = qi === -1 ? '' : path.slice(qi + 1)
+  const query = rest ? `?${rest}&_n=${Date.now()}` : `?_n=${Date.now()}`
+  await page.goto(`${base}/${query}${p0}`, {
     waitUntil: 'domcontentloaded',
     timeout: 45000,
   })

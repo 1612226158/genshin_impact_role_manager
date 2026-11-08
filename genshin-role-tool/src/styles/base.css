@@ -99,6 +99,20 @@ ol {
   font-variant-numeric: tabular-nums;
 }
 
+/* 诊断开关（main.js 按 URL 参数挂类）：
+   html.flat    禁用全站 backdrop-filter 与 filter —— 用于定位合成层负载问题
+   html.no-stars 隐藏星空 canvas */
+html.flat *,
+html.flat *::before,
+html.flat *::after {
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+html.no-stars canvas.bg-stars {
+  display: none;
+}
+
 .gs-line-t {
   border-top: 1px solid var(--gs-line);
 }
