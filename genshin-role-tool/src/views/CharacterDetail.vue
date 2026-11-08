@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ElementBadge from '@/components/ElementBadge.vue'
 import { useCharacterStore } from '@/stores/character'
@@ -30,9 +30,28 @@ watch(
     tab.value = 'stats'
     // 左侧头像栏把当前角色滚进可视区
     await nextTick()
-    railRef.value?.querySelector('.rail-item.on')?.scrollIntoView({ block: 'nearest' })
+    scrollRailToActive()
   }
 )
+
+/** 把头像栏滚动到当前角色（居中）。手动设 scrollTop，避免 scrollIntoView 连带滚动整页 */
+function scrollRailToActive() {
+  const rail = railRef.value
+  const item = rail?.querySelector('.rail-item.on')
+  if (!rail || !item) return
+  rail.scrollTop = item.offsetTop - rail.clientHeight / 2 + item.clientHeight / 2
+}
+
+onMounted(async () => {
+  // 首次进入（含从角色库点入）也要定位：组件新挂载不会触发 route watch
+  await nextTick()
+  await sleepSmall()
+  scrollRailToActive()
+})
+
+function sleepSmall() {
+  return new Promise((r) => setTimeout(r, 60))
+}
 
 // 切换页签回到页首，并重置文字面板的内部滚动
 watch(tab, () => {
@@ -391,6 +410,7 @@ function avatarOf(c) {
 
 /* 左侧角色头像切换栏 */
 .rail {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 9px;
