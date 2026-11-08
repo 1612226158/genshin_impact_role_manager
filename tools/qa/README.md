@@ -31,6 +31,8 @@ npm install
 | `node contact-sheet.mjs <帧目录> [输出]` | 抽帧拼成带时间戳的总览图 |
 | `node inspect-page.mjs <URL>` | 外部页面勘察：无头加载 JS 站点，输出标题/文本/图片响应清单 |
 | `monitor-chromium.ps1 [秒]` | 监视 Chromium 系进程创建（含父进程与完整命令行），输出 monitor-log.txt。⚠️ 本文件必须保持纯 ASCII |
+| `net-monitor.mjs [静置秒] [路径]` | 页面静置期间的请求监视（检测注入脚本心跳、favicon 循环等） |
+| `diag-flags.mjs` | 断言诊断开关（?flat=1 / ?nostar=1）在 computed style 层面生效 |
 
 ## 已知坑（勿重蹈）
 
