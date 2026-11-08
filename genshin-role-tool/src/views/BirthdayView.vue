@@ -109,16 +109,22 @@ function goMonth(m) {
   browseMonth.value = Math.min(12, Math.max(1, m))
 }
 
-/** 横向滚轮：锁定期内只响应一次，保证「滑一次切一个月」 */
+/** 滚轮切月：横向滚轮（触控板）与普通纵向滚轮都支持；
+ *  仅在确实能切到相邻月份时拦截，到 1 月/12 月边界交还页面滚动 */
 function onWheel(e) {
-  const horizontal = Math.abs(e.deltaX) >= Math.abs(e.deltaY)
-  const delta = horizontal ? e.deltaX : e.shiftKey ? e.deltaY : 0
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1
+  const rawX = e.deltaX * unit
+  const rawY = e.deltaY * unit
+  const delta = Math.abs(rawX) > Math.abs(rawY) ? rawX : rawY
   if (!delta) return
+  const dir = delta > 0 ? 1 : -1
+  const next = browseMonth.value + dir
+  if (next < 1 || next > 12) return // 边界：不拦截，让页面正常滚动
   e.preventDefault()
   const now = performance.now()
   if (now < wheelLock) return
   wheelLock = now + 460
-  goMonth(browseMonth.value + (delta > 0 ? 1 : -1))
+  goMonth(next)
 }
 
 function onTrackKey(e) {

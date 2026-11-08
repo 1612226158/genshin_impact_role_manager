@@ -130,6 +130,38 @@ try {
     `${after2.x} vs ${beforeLock.x - beforeLock.w}`
   )
 
+  console.log('4b) 普通纵向滚轮（只有 deltaY 的鼠标）也能切月')
+  const clickMonth = async (m) => {
+    await page.evaluate((mm) => {
+      const btn = [...document.querySelectorAll('.mtab')].find((b) => b.textContent.trim().startsWith(`${mm}月`))
+      btn?.click()
+    }, m)
+    await sleep(700)
+  }
+  await clickMonth(6)
+  const preY = await state()
+  const sy0 = await page.evaluate(() => window.scrollY)
+  await page.mouse.move(box.x, box.y)
+  await page.mouse.wheel({ deltaY: 120 })
+  await sleep(700)
+  const postY = await state()
+  const sy1 = await page.evaluate(() => window.scrollY)
+  console.log(`  6月 x=${preY.x} → ${postY.x}；页面 scrollY ${sy0} → ${sy1}`)
+  check('纵向滚轮切换到下一月', Math.abs(postY.x - (preY.x - preY.w)) <= 4, `${postY.x} vs ${preY.x - preY.w}`)
+  check('页面未被滚动（滚轮事件被拦截）', Math.abs(sy1 - sy0) <= 1, `${sy0} → ${sy1}`)
+
+  console.log('4c) 边界交还页面滚动')
+  await clickMonth(12)
+  const sy2 = await page.evaluate(() => window.scrollY)
+  await page.mouse.move(box.x, box.y)
+  await page.mouse.wheel({ deltaY: 200 })
+  await sleep(600)
+  const sy3 = await page.evaluate(() => window.scrollY)
+  const still12 = await state()
+  console.log(`  12月再下滚：scrollY ${sy2} → ${sy3}，月份 ${still12.month}`)
+  check('12 月处滚轮交还页面（页面滚动）', sy3 > sy2 + 20, `${sy2} → ${sy3}`)
+  check('月份停在 12 月', still12.month?.startsWith('12月'), still12.month)
+
   console.log('5) 页签点击与轮播同步')
   await page.evaluate(() => {
     const btn = [...document.querySelectorAll('.mtab')].find((b) => b.textContent.trim().startsWith('7月'))
