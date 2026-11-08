@@ -24,10 +24,13 @@ try {
   await openRoute(page, BASE, '/c/1055')
   await sleep(800)
 
-  const bodyTrans = await page.evaluate(
-    () => getComputedStyle(document.querySelector('.body')).transition
-  )
-  check('布局列宽过渡仍在（grid-template-columns 动画不受系统设置影响）', /grid-template-columns/.test(bodyTrans))
+  const stageTrans = await page.evaluate(() => {
+    const el = document.querySelector('.stage')
+    return el ? getComputedStyle(el).transition : ''
+  })
+  check('立绘列宽过渡仍在（max-width 动画不受系统设置影响）', /max-width/.test(stageTrans))
+
+  const stageW0 = await page.evaluate(() => +document.querySelector('.stage').getBoundingClientRect().width.toFixed(1))
 
   const pillDur = await page.evaluate(() => {
     const el = document.querySelector('.gs-pill') || document.querySelector('.gs-btn')
@@ -47,10 +50,10 @@ try {
   })
   check('切换瞬间 tab-body 处于位移中间态（matrix ≠ none）', mid && mid !== 'none')
 
-  const wideCols = await page.evaluate(
-    () => getComputedStyle(document.querySelector('.body')).gridTemplateColumns
-  )
-  check('故事页签下布局为四列（含收窄立绘列）', wideCols.trim().split(' ').length === 4)
+  const stageW1 = await page.evaluate(() => +document.querySelector('.stage').getBoundingClientRect().width.toFixed(1))
+  const columns = await page.evaluate(() => document.querySelectorAll('.body > *').length)
+  check('故事页签下立绘列收窄', stageW1 < stageW0 - 40, `${stageW0} → ${stageW1}`)
+  check('详情页仍为四栏结构（头像栏/分区/立绘/面板）', columns === 4, `children=${columns}`)
 
   console.log('3) 应用内动画开关')
   await page.evaluate(() => {

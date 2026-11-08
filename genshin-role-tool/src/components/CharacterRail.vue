@@ -83,6 +83,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .rail {
   position: relative;
+  flex: 0 0 46px;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -120,7 +121,7 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 1200px) { .rail-item { width: 32px; height: 32px; } }
 @media (max-width: 900px) {
-  .rail { flex-direction: row; max-height: none; overflow-x: auto; overflow-y: hidden; padding: 6px 3px; }
+  .rail { flex: 0 0 auto; width: 100%; flex-direction: row; max-height: none; overflow-x: auto; overflow-y: hidden; padding: 6px 3px; }
   .rail-item { width: 36px; height: 36px; }
 }
 </style>

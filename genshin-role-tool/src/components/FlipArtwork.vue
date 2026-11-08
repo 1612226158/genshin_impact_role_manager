@@ -39,12 +39,23 @@ onBeforeUnmount(() => observer?.disconnect())
 </template>
 
 <style scoped>
-.flip-artwork { position: relative; width: 100%; height: min(820px, calc(100vh - 250px)); min-height: 240px; padding: 0 0 26px; perspective: 1400px; }
+.flip-artwork { position: relative; width: 100%; height: min(820px, calc(100vh - 250px)); min-height: 240px; padding: 0 0 26px; perspective: 1400px; transition: height .34s var(--gs-ease); }
 .flip-inner { position: relative; display: block; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .65s cubic-bezier(.2,.75,.25,1); }
 .flipped .flip-inner { transform: rotateY(180deg); }
 .flip-face { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .back-face { transform: rotateY(180deg); }
-.flip-face img { max-height: 100%; max-width: 100%; width: auto; height: auto; object-fit: contain; border-radius: 8px; box-shadow: 0 16px 40px #0007; outline: 1px solid var(--gs-line-hi); }
+.flip-face img {
+  max-height: 100%;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 16px 40px #0007;
+  outline: 1px solid var(--gs-line-hi);
+  /* 尺寸随 ResizeObserver 每帧重算，天然连续；
+     不要再对 width/height 加过渡——宽高若不同步会短暂破坏图片比例 */
+}
 .flip-hint { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; color: var(--gs-ink-2); font-size: 11.5px; }
 .flip-hint span { color: var(--gs-gold); margin-left: 5px; }
 @media (max-width: 900px) { .flip-artwork { height: 58vh; } }

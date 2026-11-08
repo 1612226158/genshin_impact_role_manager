@@ -325,21 +325,26 @@ function toggleOne(p) {
 .body {
   position: relative;
   z-index: 2;
-  display: grid;
-  grid-template-columns: 46px 104px minmax(0, 1fr) 380px;
+  /* flex 而非 grid：grid-template-columns 的 minmax(0,1fr) ↔ minmax(240px,340px)
+     无法插值（实测瞬时跳变），改用可插值的 max-width 让立绘列连续收窄 */
+  display: flex;
   gap: 22px;
   padding-top: 18px;
-  align-items: start;
-  /* 切换页签时立绘列与面板宽度平滑过渡（Chrome 107+ 支持网格轨道动画） */
-  transition: grid-template-columns 0.34s var(--gs-ease);
+  align-items: flex-start;
 }
 
-/* 故事 / 相册页签：立绘保留在左（收窄），右侧换宽版文字面板（内部滚动） */
-.body.wide {
-  grid-template-columns: 46px 104px minmax(240px, 340px) minmax(500px, 1fr);
+/* 故事 / 相册页签：立绘列收窄（平滑），右侧换宽面板 */
+.body.wide .stage {
+  max-width: 340px;
+}
+
+/* 立绘随之等比缩放（高度收一档，与列宽过渡同步） */
+.body.wide :deep(.flip-artwork) {
+  height: min(560px, calc(100vh - 320px));
 }
 
 .body.wide .side {
+  flex: 1 1 0;
   min-width: 0;
   max-height: calc(100vh - 200px);
   /* 面板本身不滚动：头部（名称/称号/星级/按钮）固定，只有下方 tab-body 内容滚动 */
@@ -357,6 +362,7 @@ function toggleOne(p) {
 }
 
 .tabs {
+  flex: 0 0 104px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -405,13 +411,18 @@ function toggleOne(p) {
 }
 
 .stage {
+  flex: 1 1 0;
   min-width: 0;
+  /* 显式起点：max-width 从 none 出发不可插值，100% ↔ 340px 才可过渡 */
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
   /* 与左栏「属性」按钮、右栏姓名同一顶线 */
   padding-top: 16px;
+  /* 立绘列收窄的过渡（max-width 可插值，grid 轨道不可） */
+  transition: max-width 0.34s var(--gs-ease);
 }
 
 .poster {
@@ -476,6 +487,7 @@ function toggleOne(p) {
 }
 
 .side {
+  flex: 0 0 380px;
   min-width: 0;
   /* 顶部 16px 与「属性」按钮同一顶线 */
   padding: 16px 16px 18px;
@@ -765,11 +777,13 @@ function toggleOne(p) {
 
 @media (max-width: 1200px) {
   .body {
-    grid-template-columns: 40px 84px minmax(0, 1fr) 320px;
     gap: 14px;
   }
-  .body.wide {
-    grid-template-columns: 40px 84px minmax(200px, 300px) minmax(380px, 1fr);
+  .body.wide .stage {
+    max-width: 300px;
+  }
+  .side {
+    flex-basis: 320px;
   }
   .side h1 {
     font-size: 24px;
@@ -786,8 +800,25 @@ function toggleOne(p) {
   }
   .body,
   .body.wide {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     gap: 12px;
+  }
+  /* 纵向排列后 flex-basis 作用在高度上：必须改为内容自适应，否则舞台高度塌成 0 */
+  .stage {
+    flex: 1 1 auto;
+    max-width: none;
+    width: 100%;
+  }
+  .body.wide .stage,
+  .body.wide .side,
+  .side {
+    max-width: none;
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .tabs {
+    flex: 0 0 auto;
+    width: 100%;
   }
   .body.wide .side {
     max-height: none;
