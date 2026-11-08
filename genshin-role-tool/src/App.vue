@@ -8,20 +8,22 @@ import { useSettingsStore } from '@/stores/settings'
 useSettingsStore()
 
 // 诊断开关：?nostarapp=1 不渲染星空组件（隔离 ResizeObserver + fixed canvas）
+//           ?noview=1  不渲染路由视图与页脚（只留顶栏，隔离各页面内容）
 const noStarApp = new URLSearchParams(location.search).has('nostarapp')
+const noView = new URLSearchParams(location.search).has('noview')
 </script>
 
 <template>
   <Starfield v-if="!noStarApp" />
   <TopBar />
-  <main>
+  <main v-if="!noView">
     <RouterView v-slot="{ Component }">
       <Transition name="fade" mode="out-in">
         <component :is="Component" />
       </Transition>
     </RouterView>
   </main>
-  <footer class="site-foot">
+  <footer v-if="!noView" class="site-foot">
     <p>
       角色名称、背景故事与图片素材版权归
       <span class="gold">miHoYo / HoYoverse</span>
