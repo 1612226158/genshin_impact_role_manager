@@ -3,8 +3,8 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  // history 模式路由要求绝对 base（vite dev / preview 自带 SPA fallback）
-  base: '/',
+  // 本地与 QA 用根路径 '/'；GitHub Pages 项目页在 /<仓库名>/ 子路径下构建
+  base: process.env.GITHUB_PAGES === '1' ? '/genshin_impact_role_manager/' : '/',
   plugins: [vue()],
   resolve: {
     alias: {

@@ -32,7 +32,29 @@ npm run preview    # 本地预览构建产物
 ## 部署说明
 
 路由使用 history 模式，**部署时需要服务器支持 SPA fallback**（所有路径回退 `index.html`）。
-`vite dev` 与 `vite preview` 均已内置，无需配置；其他静态托管（Nginx、GH Pages 等）需自行添加该规则。
+`vite dev` 与 `vite preview` 均已内置，本地无需额外配置。
+
+### GitHub Pages（已配置自动部署）
+
+推送到 `master` 即由 `.github/workflows/deploy.yml` 自动构建并发布：
+
+- 线上地址：<https://1612226158.github.io/genshin_impact_role_manager/>
+- 构建时由 workflow 注入 `GITHUB_PAGES=1`，`vite.config.js` 据此把 `base` 设为
+  `/genshin_impact_role_manager/`（项目页在子路径下，本地开发仍用 `/`）
+- deep link（如 `/c/1055` 直接访问或刷新）依赖构建脚本生成的 `dist/404.html`：
+  GitHub Pages 是纯静态服务器，未知路径返回 404，该文件即应用外壳，路由按当前
+  pathname 正常渲染
+- 仓库需为 **public**（免费账号的 Pages 限制）
+
+本地复现 Pages 环境：
+
+```bash
+cd genshin-role-tool
+GITHUB_PAGES=1 npm run build
+npx vite preview   # 打开 http://localhost:4173/genshin_impact_role_manager/
+```
+
+其他静态托管（Nginx、对象存储等）需自行添加「未知路径回退 `index.html`」规则。
 
 ## 已知问题
 
