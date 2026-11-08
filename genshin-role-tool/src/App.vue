@@ -47,7 +47,9 @@ const noView = new URLSearchParams(location.search).has('noview')
 main {
   position: relative;
   z-index: var(--gs-z-content);
-  min-height: calc(100vh - 62px - 68px);
+  /* 固定顶栏（63px）的补偿偏移，防止页面内容被遮挡 */
+  padding-top: 63px;
+  min-height: calc(100vh - 63px - 68px);
 }
 
 .site-foot {

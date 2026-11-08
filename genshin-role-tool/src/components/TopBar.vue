@@ -47,8 +47,13 @@ const activeKey = computed(() => route.meta?.nav || '')
 
 <style scoped>
 .topbar {
-  position: sticky;
+  /* fixed 而非 sticky：钉死在视口顶部，不依赖滚动容器机制
+     （sticky 在特定 Edge 版本下会被窗口管理故障波及） */
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
+  height: 63px;
   z-index: var(--gs-z-bar);
   backdrop-filter: blur(14px);
   background: linear-gradient(180deg, rgba(7, 21, 33, 0.92), rgba(7, 21, 33, 0.62));
