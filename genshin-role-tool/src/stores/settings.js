@@ -1,4 +1,4 @@
-import { computed } from 'vue'
+import { computed, watchEffect } from 'vue'
 import { defineStore } from 'pinia'
 import { usePersist } from '@/composables/usePersist'
 import { KEYS, SCHEMA_VERSION, storageAvailable } from '@/utils/storage'
@@ -11,10 +11,17 @@ const APP_TAG = 'genshin-role-tool'
 export const useSettingsStore = defineStore('settings', () => {
   const settings = usePersist(KEYS.settings, {
     schemaVersion: SCHEMA_VERSION,
+    motion: 'on', // 'on' | 'off' —— 以应用内设置为准，不跟随系统动画开关
     lastVisited: '/',
   })
 
   const storageOk = computed(() => storageAvailable())
+
+  // 动画开关落到 <html> 根类，全站过渡与装饰动画统一受控
+  watchEffect(() => {
+    const off = settings.value?.motion === 'off'
+    document.documentElement.classList.toggle('no-motion', off)
+  })
 
   /**
    * 导出全部文本数据

@@ -77,6 +77,14 @@ function doImport() {
 }
 
 const confirmState = ref('')
+
+const motion = computed({
+  get: () => settings.settings.motion || 'on',
+  set: (v) => {
+    settings.settings.motion = v
+    toast.push(v === 'on' ? '动画已开启' : '动画已关闭')
+  },
+})
 const CONFIRMS = {
   history: {
     title: '清空全部编辑记录？',
@@ -139,6 +147,24 @@ const storageText = computed(() => (settings.storageOk ? '可用' : '不可用�
         <span class="sep">·</span>
         数据结构版本 v{{ settings.SCHEMA_VERSION }}
       </p>
+    </section>
+
+    <section class="block gs-panel">
+      <h2>视觉</h2>
+      <p class="desc">
+        动画效果只由这里控制，不受系统「辅助功能 → 视觉效果 → 动画效果」影响。
+        关闭后过渡与装饰动画会变成瞬时切换。
+      </p>
+      <div class="row">
+        <label class="mode">
+          <input v-model="motion" type="radio" value="on" />
+          开启（默认）
+        </label>
+        <label class="mode">
+          <input v-model="motion" type="radio" value="off" />
+          关闭
+        </label>
+      </div>
     </section>
 
     <section class="block gs-panel">

@@ -2,6 +2,10 @@
 import Starfield from '@/components/Starfield.vue'
 import TopBar from '@/components/TopBar.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import { useSettingsStore } from '@/stores/settings'
+
+// 应用根部激活动画开关监听：无论当前在哪个路由，<html>.no-motion 都随设置即时生效
+useSettingsStore()
 </script>
 
 <template>

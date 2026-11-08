@@ -175,10 +175,17 @@ function avatarOf(c) {
       <!-- 中央立绘 -->
       <div class="stage">
         <div class="poster" :class="{ 'no-art': !paintingSrc }">
-          <img v-if="paintingSrc" :src="paintingSrc" :alt="`${character.name} 立绘`" />
-          <div v-else class="poster-empty">
-            <span>官方未提供立绘</span>
-          </div>
+          <Transition name="posterfade" mode="out-in">
+            <img
+              v-if="paintingSrc"
+              :key="paintingSrc"
+              :src="paintingSrc"
+              :alt="`${character.name} 立绘`"
+            />
+            <div v-else key="none" class="poster-empty">
+              <span>官方未提供立绘</span>
+            </div>
+          </Transition>
         </div>
 
         <div v-if="paintings.length > 1" class="thumbs">
@@ -217,7 +224,9 @@ function avatarOf(c) {
           </button>
         </div>
 
-        <template v-if="tab === 'stats'">
+        <Transition name="tabfade" mode="out-in">
+          <div :key="tab" class="tab-body">
+            <template v-if="tab === 'stats'">
           <dl class="stats">
             <div v-for="r in statRows" :key="r.k">
               <dt>{{ r.k }}</dt>
@@ -288,6 +297,8 @@ function avatarOf(c) {
             </div>
           </template>
         </template>
+          </div>
+        </Transition>
       </aside>
     </div>
   </div>
@@ -416,6 +427,8 @@ function avatarOf(c) {
   gap: 22px;
   padding-top: 18px;
   align-items: start;
+  /* 切换页签时立绘列与面板宽度平滑过渡（Chrome 107+ 支持网格轨道动画） */
+  transition: grid-template-columns 0.34s var(--gs-ease);
 }
 
 /* 故事 / 相册页签：立绘保留在左（收窄），右侧换宽版文字面板（内部滚动） */
@@ -428,9 +441,6 @@ function avatarOf(c) {
   max-height: calc(100vh - 200px);
   overflow-y: auto;
   padding: 8px 16px 20px 4px;
-  /* 立绘列与文字面板之间的一条金色分隔 */
-  border-left: 1px solid var(--gs-line);
-  padding-left: 22px;
 }
 
 .tabs {
@@ -835,6 +845,29 @@ function avatarOf(c) {
 
 .missing .gs-btn {
   margin-top: 16px;
+}
+
+/* 页签内容与立绘的平滑切换：卡片滑动而非纯淡入 */
+.tabfade-enter-active,
+.tabfade-leave-active {
+  transition: opacity 0.2s var(--gs-ease), transform 0.24s var(--gs-ease);
+}
+.tabfade-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.tabfade-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.posterfade-enter-active,
+.posterfade-leave-active {
+  transition: opacity 0.24s var(--gs-ease);
+}
+.posterfade-enter-from,
+.posterfade-leave-to {
+  opacity: 0;
 }
 
 @media (max-width: 1200px) {

@@ -193,11 +193,13 @@ ol {
   opacity: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+/* 动画关闭：仅由应用内「设置 → 视觉 → 动画效果」控制（html.no-motion），
+   不跟随系统 prefers-reduced-motion——Windows 辅助功能关动画的用户也应有完整过渡 */
+html.no-motion *,
+html.no-motion *::before,
+html.no-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
