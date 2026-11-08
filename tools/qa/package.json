@@ -1,0 +1,17 @@
+{
+  "name": "genshin-qa-toolkit",
+  "private": true,
+  "type": "module",
+  "description": "项目 QA 工具集：无头截图、端到端断言、视频抽帧、成品导出。独立依赖，不污染主工程。",
+  "scripts": {
+    "shoot": "node shoot.mjs",
+    "e2e": "node e2e.mjs",
+    "motion": "node motion.mjs",
+    "frames": "node frames.mjs",
+    "dumpcard": "node dumpcard.mjs",
+    "collage": "node collage.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}
