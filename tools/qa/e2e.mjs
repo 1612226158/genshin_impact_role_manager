@@ -29,7 +29,7 @@ try {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 
   console.log('1) 编辑角色并保存')
-  await openRoute(page, BASE, '/#/c/1055/edit')
+  await openRoute(page, BASE, '/c/1055/edit')
   await sleep(900)
   const found = await page.evaluate(() => {
     const el = [...document.querySelectorAll('input')].find((i) => i.value === '无害甜度')
@@ -46,7 +46,7 @@ try {
   })
   await sleep(1200)
   const afterSave = await page.evaluate(() => ({
-    path: location.hash,
+    path: location.pathname,
     toast: document.body.innerText.includes('已保存'),
     shown: document.body.innerText.includes('无害甜度·改'),
   }))
@@ -55,7 +55,7 @@ try {
   check('详情页显示新称号', afterSave.shown)
 
   console.log('2) 编辑记录与撤销')
-  await openRoute(page, BASE, '/#/history')
+  await openRoute(page, BASE, '/history')
   await sleep(600)
   check('记录页出现本次修改', await page.evaluate(() => document.body.innerText.includes('无害甜度·改')))
   await page.evaluate(() => {
@@ -66,7 +66,7 @@ try {
   check('撤销成功提示', await page.evaluate(() => document.body.innerText.includes('已撤销')))
 
   console.log('3) 新建自定义角色')
-  await openRoute(page, BASE, '/#/c/new/edit')
+  await openRoute(page, BASE, '/c/new/edit')
   await sleep(900)
   await page.evaluate(() => {
     const name = [...document.querySelectorAll('input[type=text]')].find(
@@ -81,7 +81,7 @@ try {
     b?.click()
   })
   await sleep(1200)
-  check('创建后跳转新角色详情', /^#\/c\/c_/.test(await page.evaluate(() => location.hash)))
+  check('创建后跳转新角色详情', /^\/c\/c_/.test(await page.evaluate(() => location.pathname)))
 
   console.log('4) 刷新页面验证持久化')
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -92,11 +92,11 @@ try {
   }))
   check('localStorage 保留覆盖层数据', Object.keys(persisted.overrides).length > 0)
   check('localStorage 保留自建角色', persisted.customs.length > 0)
-  await openRoute(page, BASE, '/#/')
+  await openRoute(page, BASE, '/')
   check('角色库中出现自建角色', await page.evaluate(() => document.body.innerText.includes('测试角色甲')))
 
   console.log('5) 生日同日查询（含 2/29 边界）')
-  await openRoute(page, BASE, '/#/birthday')
+  await openRoute(page, BASE, '/birthday')
   await sleep(600)
   const set = await page.evaluate(({ m, d }) => {
     const sels = [...document.querySelectorAll('select')]
@@ -119,14 +119,14 @@ try {
   )
 
   console.log('6) 相册收藏')
-  await openRoute(page, BASE, '/#/c/1055')
+  await openRoute(page, BASE, '/c/1055')
   await sleep(800)
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('加入相册'))
     b?.click()
   })
   await sleep(800)
-  await openRoute(page, BASE, '/#/album')
+  await openRoute(page, BASE, '/album')
   check('相册出现收藏项', await page.evaluate(() => document.querySelectorAll('.tile').length > 0))
   check(
     '相册索引已持久化',

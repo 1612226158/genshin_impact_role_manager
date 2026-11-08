@@ -3,8 +3,8 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  // 相对路径：构建产物既可挂载到任意子目录，也可直接双击 dist/index.html 打开
-  base: './',
+  // history 模式路由要求绝对 base（vite dev / preview 自带 SPA fallback）
+  base: '/',
   plugins: [vue()],
   resolve: {
     alias: {

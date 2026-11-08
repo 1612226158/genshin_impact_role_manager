@@ -21,7 +21,7 @@ try {
 
   console.log('1) 模拟 Windows 辅助功能关闭动画（prefers-reduced-motion: reduce）')
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }])
-  await openRoute(page, BASE, '/#/c/1055')
+  await openRoute(page, BASE, '/c/1055')
   await sleep(800)
 
   const bodyTrans = await page.evaluate(

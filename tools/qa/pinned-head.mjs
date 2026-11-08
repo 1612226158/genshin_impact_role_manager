@@ -13,7 +13,7 @@ try {
   if (!(await waitServer(BASE))) throw new Error('server not ready')
   const browser = await launchBrowser()
   const page = await browser.newPage()
-  await openRoute(page, BASE, '/#/c/1055')
+  await openRoute(page, BASE, '/c/1055')
   await page.evaluate(CLICK_TAB_SCRIPT(1)) // 背景故事
   await sleep(800)
 

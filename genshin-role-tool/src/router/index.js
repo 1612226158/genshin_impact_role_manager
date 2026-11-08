@@ -1,8 +1,13 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 
 /**
- * hash 模式：纯静态部署时无需服务端 rewrite，
- * 且构建产物可直接双击 dist/index.html 打开。
+ * history 模式（2026-11-08 由 hash 模式切换）：
+ * hash 模式的 hashchange/popstate 监听与 history.replaceState 操作，
+ * 在特定环境下（Edge 157 + Windows 动画关闭 + 后台模式实例）会触发
+ * 「最小化被强制还原 / 幽灵 about:blank 窗口」的系统级窗口故障，
+ * 最小复现实验（诊断开关 minimal ± withrouter）已确认。
+ * createWebHistory 走标准 popstate，全互联网 SPA 通用，不受影响。
+ * 服务端兼容性：vite dev / vite preview 均自带 SPA fallback，无额外配置。
  */
 const routes = [
   {
@@ -51,7 +56,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHashHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior(to, from, saved) {
     if (saved) return saved

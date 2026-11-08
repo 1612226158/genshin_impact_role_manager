@@ -25,11 +25,11 @@ try {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 
   if (mode === 'card') {
-    await openRoute(page, BASE, '/#/birthday')
+    await openRoute(page, BASE, '/birthday')
     await page.waitForFunction(() => Boolean(document.querySelector('canvas.cv')), { timeout: 20000 })
     await sleep(2500)
   } else {
-    await openRoute(page, BASE, '/#/album')
+    await openRoute(page, BASE, '/album')
     await page.evaluate((items) => localStorage.setItem('gsr.album.v1', JSON.stringify(items)), ALBUM_ITEMS)
     await page.reload({ waitUntil: 'domcontentloaded' })
     await sleep(2000)
