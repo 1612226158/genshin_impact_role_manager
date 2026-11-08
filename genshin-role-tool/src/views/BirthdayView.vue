@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import BirthdayCardCanvas from '@/components/BirthdayCardCanvas.vue'
+import BirthdayCalendar from '@/components/BirthdayCalendar.vue'
 import ElementBadge from '@/components/ElementBadge.vue'
 import { useCharacterStore } from '@/stores/character'
 import { useAlbumStore } from '@/stores/album'
@@ -12,6 +14,7 @@ import { pickGreeting } from '@/utils/greetings'
 const store = useCharacterStore()
 const album = useAlbumStore()
 const toast = useToastStore()
+const router = useRouter()
 
 const now = new Date()
 const todayM = now.getMonth() + 1
@@ -23,8 +26,11 @@ const browseMonth = ref(todayM)
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 
+/** 无年份概念：固定 12 个月的日历长度；2 月按 29 天（存在 2/29 生日） */
+const CAL_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
 function daysInMonth(m) {
-  return new Date(2024, m, 0).getDate()
+  return CAL_DAYS[m - 1] || 30
 }
 
 const dayOptions = computed(() => Array.from({ length: daysInMonth(qMonth.value) }, (_, i) => i + 1))
@@ -65,6 +71,21 @@ const monthGroups = computed(() => {
 })
 
 const monthCount = computed(() => monthGroups.value.reduce((s, g) => s + g.list.length, 0))
+
+/* 日历视图：按日聚合当月生日，点击直接进入角色详情 */
+const calendarDays = computed(() => daysInMonth(browseMonth.value))
+const byDay = computed(() => {
+  const map = {}
+  for (const c of withBirthday.value) {
+    if (c.birthdayMonth !== browseMonth.value) continue
+    ;(map[c.birthdayDay] || (map[c.birthdayDay] = [])).push(c)
+  }
+  return map
+})
+
+function goCharacter(c) {
+  if (c?.id) router.push(`/c/${c.id}`)
+}
 
 const noBirthday = computed(() => store.all.filter((c) => !c.birthdayMonth || !c.birthdayDay))
 
@@ -256,26 +277,15 @@ function avatarOf(c) {
             </button>
           </div>
 
-          <div v-if="monthGroups.length" class="groups">
-            <div v-for="g in monthGroups" :key="g.day" class="group">
-              <span class="gday nums">{{ browseMonth }}/{{ String(g.day).padStart(2, '0') }}</span>
-              <div class="glist">
-                <button
-                  v-for="c in g.list"
-                  :key="c.id"
-                  type="button"
-                  class="gitem"
-                  :class="{ on: String(selectedId) === String(c.id) }"
-                  @click="selectChar(c)"
-                >
-                  <ElementBadge :element="c.element" size="sm" />
-                  <span class="gn">{{ c.name }}</span>
-                  <span class="gt">{{ c.title }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <p v-else class="none">这个月没有收录到生日。</p>
+          <!-- 按月浏览：日历网格（7 列骨架，无星期，2 月固定 29 天） -->
+          <BirthdayCalendar
+            :month="browseMonth"
+            :days="calendarDays"
+            :by-day="byDay"
+            :today="{ month: todayM, day: todayD }"
+            @pick="goCharacter"
+          />
+          <p v-if="!monthCount" class="none">这个月没有收录到生日。</p>
         </section>
 
         <section v-if="noBirthday.length" class="panel gs-panel">
