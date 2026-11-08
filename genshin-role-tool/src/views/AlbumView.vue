@@ -487,9 +487,14 @@ watch(filter, () => {
   position: absolute;
   right: 8px;
   top: 8px;
-  padding: 1px 8px;
+  /* 与左侧 .order 圆形角标同高（22px）并垂直居中，顶线一致 */
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
   border-radius: 999px;
   font-size: 10px;
+  line-height: 1;
   color: var(--gs-gold-hi);
   background: rgba(6, 18, 28, 0.78);
   border: 1px solid var(--gs-line-hi);

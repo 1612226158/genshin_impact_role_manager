@@ -410,6 +410,8 @@ function toggleOne(p) {
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  /* 与左栏「属性」按钮、右栏姓名同一顶线 */
+  padding-top: 16px;
 }
 
 .poster {
@@ -475,7 +477,8 @@ function toggleOne(p) {
 
 .side {
   min-width: 0;
-  padding: 8px 16px 18px;
+  /* 顶部 16px 与「属性」按钮同一顶线 */
+  padding: 16px 16px 18px;
   border-left: 1px solid var(--gs-line);
   background: linear-gradient(90deg, rgba(7, 21, 33, 0.46), rgba(7, 21, 33, 0.12));
   border-radius: 0 8px 8px 0;
@@ -485,6 +488,12 @@ function toggleOne(p) {
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+
+/* 「属性」页签：右栏顶线与左侧「属性」按钮、中央海报对齐
+   （故事/相册页签走 .body.wide 的紧凑 8px 头部，不在此列） */
+.body:not(.wide) .side {
+  padding-top: 16px;
 }
 
 .side h1 {

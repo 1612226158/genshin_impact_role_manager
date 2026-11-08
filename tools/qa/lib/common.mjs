@@ -8,7 +8,8 @@ export const ROOT = path.resolve(import.meta.dirname, '..', '..', '..')
 export const PROJECT = path.join(ROOT, 'genshin-role-tool')
 export const OUT_DIR = 'C:/Users/xiaoy/AppData/Local/Temp/qa-shots'
 
-export const PORT = 5317
+// QA 专用端口：与用户日常 dev（5317）隔离，避免抢占失败后静默连到旧实例、验证到过期代码
+export const PORT = Number(process.env.QA_PORT || 5319)
 export const BASE = `http://127.0.0.1:${PORT}`
 
 export const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
@@ -21,18 +22,31 @@ export const FFPROBE = 'E:/other_software/GPTSoVITS/GPT-SoVITS-v3lora-20250228/f
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/** 在后台启动 vite dev server（--strictPort），返回可 kill 的子进程 */
+/** 当前由本进程启动的 vite 子进程（供 waitServer 检测端口冲突导致的静默失败） */
+let activeChild = null
+
+/** 在后台启动 vite dev server（--strictPort）；端口被占时子进程会退出，由 waitServer 报错 */
 export function startVite(port = PORT) {
-  return spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], {
-    cwd: PROJECT,
-    stdio: 'ignore',
+  activeChild = spawn(
+    process.execPath,
+    ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'],
+    { cwd: PROJECT, stdio: 'ignore' }
+  )
+  activeChild.on('error', (e) => {
+    console.error('[qa] vite 启动失败:', e.message)
   })
+  return activeChild
 }
 
-/** 轮询等待服务就绪 */
+/** 轮询等待服务就绪；若 vite 已退出（端口被占用）立即抛错，避免连到旧实例验证过期代码 */
 export async function waitServer(base, { timeoutMs = 30000 } = {}) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
+    if (activeChild && activeChild.exitCode !== null) {
+      throw new Error(
+        `vite 启动失败（端口 ${PORT} 可能被占用/残留实例占用）。请先结束占用进程，或用 QA_PORT 指定端口。`
+      )
+    }
     try {
       const r = await fetch(base)
       if (r.ok) return true

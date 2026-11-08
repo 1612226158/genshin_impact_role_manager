@@ -5,9 +5,10 @@ import { assetUrl } from '@/utils/asset'
 import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ElementBadge from '@/components/ElementBadge.vue'
+import StyledSelect from '@/components/StyledSelect.vue'
 import { useCharacterStore } from '@/stores/character'
 import { useToastStore } from '@/stores/toast'
-import { NATIONS, WEAPONS } from '@/utils/element'
+import { NATIONS, WEAPONS, elementIcon, nationIcon } from '@/utils/element'
 
 const props = defineProps({ characterId: { type: String, required: true }, returnFocus: { default: null } })
 const emit = defineEmits(['close'])
@@ -47,6 +48,17 @@ const errors = reactive({})
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
 
+/* 选择项统一走组件库 StyledSelect（带元素/国度图标），不使用系统原生 select */
+const iconUrl = (p) => (p ? assetUrl(p) : '')
+const nationOpts = NATIONS.map((n) => ({ value: n, label: n, icon: iconUrl(nationIcon(n)) }))
+const elementOpts = computed(() =>
+  store.elementOrder.map((e) => ({ value: e, label: e, icon: iconUrl(elementIcon(e)) }))
+)
+const weaponOpts = WEAPONS.map((w) => ({ value: w, label: w }))
+const starOpts = [5, 4, 3, 2, 1].map((s) => ({ value: s, label: `${s} 星` }))
+const monthOpts = MONTHS.map((m) => ({ value: m, label: `${m} 月` }))
+const dayOpts = DAYS.map((d) => ({ value: d, label: `${d} 日` }))
+
 const bdMonth = ref('')
 const bdDay = ref('')
 
@@ -79,8 +91,8 @@ function loadIntoForm() {
   })
 
   const m = /(\d{1,2})\s*月\s*(\d{1,2})\s*日/.exec(form.birthday)
-  bdMonth.value = m ? Number(m[1]) : ''
-  bdDay.value = m ? Number(m[2]) : ''
+  bdMonth.value = m ? String(Number(m[1])) : ''
+  bdDay.value = m ? String(Number(m[2])) : ''
 
   origin.value = clone({
     name: form.name,
@@ -136,8 +148,9 @@ function markDirty() {
 
 function validate() {
   Object.keys(errors).forEach((k) => delete errors[k])
+  const star = Number(form.star)
   if (!form.name.trim()) errors.name = '名称不能为空'
-  if (!form.star || form.star < 1 || form.star > 5) errors.star = '星级需在 1–5 之间'
+  if (!star || star < 1 || star > 5) errors.star = '星级需在 1–5 之间'
   const dup = store.all.find(
     (c) =>
       c.name.trim() === form.name.trim() && String(c.id) !== String(props.characterId)
@@ -297,48 +310,69 @@ const isEdited = computed(() => store.editedIds.has(String(props.characterId)))
             <input v-model="form.title" type="text" maxlength="32" @input="markDirty" />
           </label>
 
-          <label class="field">
+          <div class="field">
             <span>国度</span>
-            <select v-model="form.nation" @change="markDirty">
-              <option v-for="n in NATIONS" :key="n" :value="n">{{ n }}</option>
-            </select>
-          </label>
+            <StyledSelect
+              v-model="form.nation"
+              :options="nationOpts"
+              hide-label label="国度"
+              placeholder="选择国度"
+              @update:model-value="markDirty"
+            />
+          </div>
           <label class="field">
             <span>所属</span>
             <input v-model="form.affiliation" type="text" @input="markDirty" />
           </label>
 
-          <label class="field">
+          <div class="field">
             <span>元素</span>
-            <select v-model="form.element" @change="markDirty">
-              <option v-for="e in store.elementOrder" :key="e" :value="e">{{ e }}</option>
-            </select>
-            <span class="hint"><ElementBadge :element="form.element" size="sm" /></span>
-          </label>
-          <label class="field">
+            <StyledSelect
+              v-model="form.element"
+              :options="elementOpts"
+              hide-label label="元素"
+              placeholder="选择元素"
+              @update:model-value="markDirty"
+            />
+          </div>
+          <div class="field">
             <span>武器</span>
-            <select v-model="form.weapon" @change="markDirty">
-              <option v-for="w in WEAPONS" :key="w" :value="w">{{ w }}</option>
-            </select>
-          </label>
+            <StyledSelect
+              v-model="form.weapon"
+              :options="weaponOpts"
+              hide-label label="武器"
+              placeholder="选择武器"
+              @update:model-value="markDirty"
+            />
+          </div>
 
-          <label class="field">
+          <div class="field">
             <span>星级</span>
-            <select v-model.number="form.star" @change="markDirty">
-              <option v-for="s in [5, 4, 3, 2, 1]" :key="s" :value="s">{{ s }} 星</option>
-            </select>
-          </label>
+            <StyledSelect
+              v-model="form.star"
+              :options="starOpts"
+              hide-label label="星级"
+              placeholder="选择星级"
+              @update:model-value="markDirty"
+            />
+          </div>
           <div class="field">
             <span>生日</span>
             <div class="bd">
-              <select v-model.number="bdMonth" @change="syncBirthday">
-                <option value="">— 月</option>
-                <option v-for="m in MONTHS" :key="m" :value="m">{{ m }} 月</option>
-              </select>
-              <select v-model.number="bdDay" @change="syncBirthday">
-                <option value="">— 日</option>
-                <option v-for="d in DAYS" :key="d" :value="d">{{ d }} 日</option>
-              </select>
+              <StyledSelect
+                v-model="bdMonth"
+                :options="monthOpts"
+                hide-label label="生日月份"
+                placeholder="月份"
+                @update:model-value="syncBirthday"
+              />
+              <StyledSelect
+                v-model="bdDay"
+                :options="dayOpts"
+                hide-label label="生日日期"
+                placeholder="日期"
+                @update:model-value="syncBirthday"
+              />
             </div>
           </div>
 
@@ -562,20 +596,29 @@ input[type='text'],
 select,
 textarea {
   width: 100%;
-  padding: 8px 11px;
+  min-height: 40px;
+  padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid var(--gs-line);
-  background: rgba(6, 20, 32, 0.6);
+  /* 与 StyledSelect 触发器完全一致的控件外观 */
+  border: 1px solid var(--gs-line-hi);
+  background: #10293d;
   color: var(--gs-ink);
   font-size: 13px;
   outline: none;
-  transition: border-color 0.18s var(--gs-ease);
+  transition: border-color 0.18s var(--gs-ease), background 0.18s var(--gs-ease);
+}
+
+input[type='text']:hover,
+textarea:hover {
+  border-color: var(--gs-gold);
+  background: #17384e;
 }
 
 input[type='text']:focus,
 select:focus,
 textarea:focus {
   border-color: var(--gs-gold);
+  background: #17384e;
 }
 
 select option {
@@ -589,15 +632,9 @@ textarea {
 }
 
 .bd {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-}
-
-.hint {
-  position: absolute;
-  right: 8px;
-  top: 27px;
-  pointer-events: none;
 }
 
 .err {
@@ -633,6 +670,17 @@ textarea {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+  align-items: stretch;
+}
+
+.add-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-row .gs-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .tip {
