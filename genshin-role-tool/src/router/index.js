@@ -24,8 +24,7 @@ const routes = [  {
   {
     path: '/c/:id/edit',
     name: 'character-edit',
-    component: () => import('@/views/CharacterEditor.vue'),
-    meta: { nav: 'library', title: '编辑角色' },
+    redirect: to => to.params.id === 'new' ? '/' : `/c/${to.params.id}`,
   },
   {
     path: '/birthday',

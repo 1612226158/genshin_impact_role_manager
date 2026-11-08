@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -8,10 +9,12 @@ const props = defineProps({
   confirmText: { type: String, default: '确认' },
   cancelText: { type: String, default: '取消' },
   danger: { type: Boolean, default: false },
+  inline: { type: Boolean, default: false },
 })
 const emit = defineEmits(['confirm', 'cancel'])
 
 const panel = ref(null)
+let locked = false
 
 function onKey(e) {
   if (!props.open) return
@@ -35,10 +38,10 @@ watch(
   () => props.open,
   (v) => {
     if (v) {
-      document.body.style.overflow = 'hidden'
+      if (!locked) { lockScroll(); locked = true }
       setTimeout(() => panel.value?.querySelector('button.primary, button.danger')?.focus(), 30)
     } else {
-      document.body.style.overflow = ''
+      if (locked) { unlockScroll(); locked = false }
     }
   }
 )
@@ -46,12 +49,12 @@ watch(
 onMounted(() => document.addEventListener('keydown', onKey))
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey)
-  document.body.style.overflow = ''
+  if (locked) unlockScroll()
 })
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport to="body" :disabled="inline">
     <Transition name="pop">
       <div v-if="open" class="mask" @click.self="emit('cancel')">
         <div ref="panel" class="panel gs-panel" role="dialog" aria-modal="true">

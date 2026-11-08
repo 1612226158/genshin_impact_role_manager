@@ -13,3 +13,6 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+
+# 参考视频抽帧与本地界面验证截图（可重新生成）
+/docs/analysis/

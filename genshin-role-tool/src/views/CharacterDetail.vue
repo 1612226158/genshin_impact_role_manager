@@ -1,18 +1,23 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ElementBadge from '@/components/ElementBadge.vue'
+import CharacterRail from '@/components/CharacterRail.vue'
+import StoryReader from '@/components/StoryReader.vue'
+import FlipArtwork from '@/components/FlipArtwork.vue'
+import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
 import { useAlbumStore } from '@/stores/album'
 import { useToastStore } from '@/stores/toast'
 import { assetUrl } from '@/utils/asset'
-import { elementColor, nationIcon } from '@/utils/element'
+import { nationIcon } from '@/utils/element'
 
 const route = useRoute()
 const router = useRouter()
 const store = useCharacterStore()
 const album = useAlbumStore()
 const toast = useToastStore()
+const editor = useEditorStore()
 
 const tab = ref('stats')
 
@@ -21,86 +26,17 @@ const character = computed(() => store.get(route.params.id))
 const paintings = computed(() => character.value?.images?.paintings || [])
 const activePainting = ref(0)
 
-const railRef = ref(null)
-
-watch(
-  () => route.params.id,
-  async () => {
-    activePainting.value = 0
-    tab.value = 'stats'
-    // 左侧头像栏把当前角色滚进可视区
-    await nextTick()
-    scrollRailToActive()
-  }
-)
-
-/** 把头像栏滚动到当前角色（居中），带 easeOutCubic 缓动动画 */
-function scrollRailToActive() {
-  const rail = railRef.value
-  const item = rail?.querySelector('.rail-item.on')
-  if (!rail || !item) return
-  const target = item.offsetTop - rail.clientHeight / 2 + item.clientHeight / 2
-  animateRailScroll(rail, target)
-}
-
-let railAnim = null
-
-function animateRailScroll(rail, target) {
-  const start = rail.scrollTop
-  const delta = target - start
-  // 距离太近 / 用户关闭动画：直接落位
-  if (Math.abs(delta) < 2 || document.documentElement.classList.contains('no-motion')) {
-    rail.scrollTop = target
-    return
-  }
-  if (railAnim) cancelAnimationFrame(railAnim)
-  const duration = 380
-  const t0 = performance.now()
-  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3)
-  const step = (now) => {
-    const p = Math.min(1, (now - t0) / duration)
-    rail.scrollTop = start + delta * easeOutCubic(p)
-    railAnim = p < 1 ? requestAnimationFrame(step) : null
-  }
-  railAnim = requestAnimationFrame(step)
-}
-
-function stopRailAnim() {
-  if (railAnim) {
-    cancelAnimationFrame(railAnim)
-    railAnim = null
-  }
-}
-
-onMounted(async () => {
-  // 首次进入（含从角色库点入）也要定位：组件新挂载不会触发 route watch
-  await nextTick()
-  await sleepSmall()
-  scrollRailToActive()
-  // 用户手动滚动头像栏时，立即让位于手动操作
-  railRef.value?.addEventListener('wheel', stopRailAnim, { passive: true })
-  railRef.value?.addEventListener('pointerdown', stopRailAnim)
+watch(() => route.params.id, () => {
+  activePainting.value = 0
+  tab.value = 'stats'
 })
 
-onBeforeUnmount(() => {
-  stopRailAnim()
-  railRef.value?.removeEventListener('wheel', stopRailAnim)
-  railRef.value?.removeEventListener('pointerdown', stopRailAnim)
-})
-
-function sleepSmall() {
-  return new Promise((r) => setTimeout(r, 60))
-}
-
-// 切换页签回到页首，并重置文字面板的内部滚动
 watch(tab, () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-  nextTick(() => document.querySelector('.side')?.scrollTo({ top: 0 }))
+  const behavior = document.documentElement.classList.contains('no-motion') ? 'instant' : 'smooth'
+  window.scrollTo({ top: 0, behavior })
 })
 
 const paintingSrc = computed(() => assetUrl(paintings.value[activePainting.value]?.file || ''))
-
-const elColor = computed(() => elementColor(character.value?.element))
 
 const nationIconSrc = computed(() => {
   const p = nationIcon(character.value?.nation)
@@ -134,17 +70,6 @@ const cvRows = computed(() => {
 
 const storySections = computed(() => character.value?.story?.sections || [])
 const albumItems = computed(() => album.byCharacter(route.params.id))
-
-/* 资料阅读器：分节目录 + 正文 */
-const activeSection = ref(0)
-const readerRef = ref(null)
-
-function jumpSection(i) {
-  activeSection.value = i
-  readerRef.value
-    ?.querySelector(`#story-sec-${i}`)
-    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
 
 const collected = computed(() => {
   const c = character.value
@@ -192,22 +117,10 @@ function toggleOne(p) {
   }
 }
 
-function avatarOf(c) {
-  return assetUrl(c.images?.avatar || c.images?.avatar_hd || '')
-}
 </script>
 
 <template>
   <div v-if="character" class="detail">
-    <div
-      class="aura"
-      :style="{
-        background: `radial-gradient(60% 55% at 42% 42%, ${elColor}30, transparent 68%),
-          linear-gradient(168deg, ${elColor}22 0%, transparent 42%, ${elColor}16 100%)`,
-      }"
-      aria-hidden="true"
-    />
-
     <header class="dhead">
       <button type="button" class="back" aria-label="返回角色库" @click="router.push('/')">←</button>
       <ElementBadge :element="character.element" size="sm" />
@@ -217,20 +130,7 @@ function avatarOf(c) {
 
     <div class="body" :class="{ wide: tab !== 'stats' }">
       <!-- 左侧角色头像切换栏（对齐游戏内角色页） -->
-      <nav ref="railRef" class="rail" aria-label="角色切换">
-        <button
-          v-for="c in store.all"
-          :key="c.id"
-          type="button"
-          class="rail-item"
-          :class="{ on: String(c.id) === String(character.id) }"
-          :title="c.name"
-          @click="go(c.id)"
-        >
-          <img v-if="avatarOf(c)" :src="avatarOf(c)" :alt="c.name" loading="lazy" />
-          <span v-else class="rail-fallback">{{ (c.name || '?').slice(0, 1) }}</span>
-        </button>
-      </nav>
+      <CharacterRail :characters="store.all" :active-id="character.id" @select="go" />
 
       <!-- 分区菜单 -->
       <nav class="tabs" aria-label="角色分区">
@@ -245,11 +145,12 @@ function avatarOf(c) {
       <div class="stage">
         <div class="poster" :class="{ 'no-art': !paintingSrc }">
           <Transition name="posterfade" mode="out-in">
-            <img
+            <FlipArtwork
               v-if="paintingSrc"
               :key="paintingSrc"
-              :src="paintingSrc"
-              :alt="`${character.name} 立绘`"
+              :front="paintingSrc"
+              :back="assetUrl(character.images?.avatar_hd || character.images?.avatar || '')"
+              :name="character.name"
             />
             <div v-else key="none" class="poster-empty">
               <span>官方未提供立绘</span>
@@ -288,7 +189,7 @@ function avatarOf(c) {
           <button type="button" class="gs-btn" :class="{ primary: !collected }" @click="toggleCollect">
             {{ collected ? '已加入相册 ✓' : '加入相册' }}
           </button>
-          <button type="button" class="gs-btn" @click="router.push(`/c/${character.id}/edit`)">
+          <button type="button" class="gs-btn" @click="editor.open(character.id, $event.currentTarget)">
             编辑
           </button>
         </div>
@@ -318,26 +219,7 @@ function avatarOf(c) {
 
         <template v-else-if="tab === 'story'">
           <!-- 资料阅读器：左侧分节目录 + 右侧连续正文（对齐游戏内资料页） -->
-          <div v-if="storySections.length" class="reader">
-            <nav class="reader-index" aria-label="故事分节">
-              <button
-                v-for="(s, i) in storySections"
-                :key="i"
-                type="button"
-                :class="{ on: i === activeSection }"
-                :title="s.section"
-                @click="jumpSection(i)"
-              >
-                {{ s.section }}
-              </button>
-            </nav>
-            <div ref="readerRef" class="reader-text">
-              <section v-for="(s, i) in storySections" :key="i" :id="`story-sec-${i}`">
-                <h3>{{ s.section }}</h3>
-                <p>{{ s.text }}</p>
-              </section>
-            </div>
-          </div>
+          <StoryReader v-if="storySections.length" :key="character.id" :sections="storySections" />
           <p v-else class="empty-story">官方未提供背景故事文本。</p>
         </template>
 
@@ -403,13 +285,6 @@ function avatarOf(c) {
   padding: 14px 28px 60px;
 }
 
-.aura {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
 .dhead {
   position: relative;
   z-index: 2;
@@ -447,63 +322,6 @@ function avatarOf(c) {
   filter: drop-shadow(0 0 4px rgba(211, 188, 142, 0.4));
 }
 
-/* 左侧角色头像切换栏 */
-.rail {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  max-height: calc(100vh - 200px);
-  overflow-y: auto;
-  padding: 16px 2px;
-  scrollbar-width: none;
-}
-
-.rail::-webkit-scrollbar {
-  display: none;
-}
-
-.rail-item {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  padding: 0;
-  border-radius: 50%;
-  border: 2px solid rgba(237, 230, 214, 0.14);
-  opacity: 0.55;
-  transition: all 0.18s var(--gs-ease);
-}
-
-.rail-item img,
-.rail-fallback {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  background: #efe9df;
-}
-
-.rail-fallback {
-  display: grid;
-  place-items: center;
-  font-family: var(--gs-font-display);
-  font-size: 16px;
-  color: #8a7c66;
-  box-sizing: border-box;
-}
-
-.rail-item:hover {
-  opacity: 0.9;
-  border-color: rgba(237, 230, 214, 0.4);
-}
-
-.rail-item.on {
-  opacity: 1;
-  border-color: #f5f2ea;
-  box-shadow: 0 0 0 2px rgba(211, 188, 142, 0.55), 0 0 16px rgba(211, 188, 142, 0.35);
-}
-
 .body {
   position: relative;
   z-index: 2;
@@ -527,7 +345,7 @@ function avatarOf(c) {
   /* 面板本身不滚动：头部（名称/称号/星级/按钮）固定，只有下方 tab-body 内容滚动 */
   display: flex;
   flex-direction: column;
-  padding: 8px 16px 16px 4px;
+  padding: 8px 16px 16px;
 }
 
 .body.wide .tab-body {
@@ -656,7 +474,11 @@ function avatarOf(c) {
 }
 
 .side {
-  padding: 8px 4px 0;
+  min-width: 0;
+  padding: 8px 16px 18px;
+  border-left: 1px solid var(--gs-line);
+  background: linear-gradient(90deg, rgba(7, 21, 33, 0.46), rgba(7, 21, 33, 0.12));
+  border-radius: 0 8px 8px 0;
 }
 
 .name-row {
@@ -764,76 +586,6 @@ function avatarOf(c) {
 .src {
   margin-top: 14px;
   font-size: 11.5px;
-}
-
-/* 资料阅读器：左目录 + 右正文 */
-.reader {
-  display: grid;
-  grid-template-columns: 138px minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-}
-
-.reader-index {
-  position: sticky;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.reader-index button {
-  text-align: left;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--gs-ink-3);
-  padding: 7px 10px;
-  border-left: 2px solid transparent;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 0.18s var(--gs-ease), background 0.18s var(--gs-ease),
-    border-color 0.18s var(--gs-ease);
-}
-
-.reader-index button:hover {
-  color: var(--gs-ink-2);
-  background: rgba(211, 188, 142, 0.06);
-}
-
-.reader-index button.on {
-  color: var(--gs-gold-hi);
-  border-left-color: var(--gs-gold);
-  background: rgba(211, 188, 142, 0.1);
-}
-
-.reader-text {
-  max-width: 640px;
-}
-
-.reader-text section {
-  margin-bottom: 22px;
-  scroll-margin-top: 10px;
-}
-
-.reader-text h3 {
-  font-size: 15px;
-  color: var(--gs-gold);
-  letter-spacing: 0.1em;
-  padding-left: 12px;
-  border-left: 2px solid var(--gs-gold-deep);
-  margin: 26px 0 12px;
-}
-
-.reader-text section:first-child h3 {
-  margin-top: 0;
-}
-
-.reader-text p {
-  font-size: 15px;
-  line-height: 2.05;
-  color: var(--gs-ink);
-  white-space: pre-wrap;
 }
 
 .empty-story {
@@ -1013,15 +765,15 @@ function avatarOf(c) {
   .side h1 {
     font-size: 24px;
   }
-  .rail-item {
-    width: 32px;
-    height: 32px;
-  }
 }
 
 @media (max-width: 900px) {
   .detail {
     padding: 12px 14px 50px;
+  }
+  .body.wide .side,
+  .side {
+    padding: 14px;
   }
   .body,
   .body.wide {
@@ -1031,38 +783,6 @@ function avatarOf(c) {
   .body.wide .side {
     max-height: none;
     overflow: visible;
-    padding-left: 0;
-  }
-  .reader {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-  .reader-index {
-    position: static;
-    flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--gs-line);
-  }
-  .reader-index button {
-    border-left: none;
-    border-bottom: 2px solid transparent;
-    flex-shrink: 0;
-    padding: 6px 10px;
-  }
-  .reader-index button.on {
-    border-bottom-color: var(--gs-gold);
-  }
-  .rail {
-    flex-direction: row;
-    max-height: none;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 4px 0;
-  }
-  .rail-item {
-    width: 36px;
-    height: 36px;
   }
   .tabs {
     flex-direction: row;

@@ -72,7 +72,7 @@ python scripts/prepare_data.py     # 生成 src/data/characters.json
 
 ## 技术说明
 
-- Vue 3.5 + Vite 8 + Vue Router 4（hash 模式）+ Pinia 4，纯前端，零后端、零网络请求
+- Vue 3.5 + Vite 8 + Vue Router 4（history 模式）+ Pinia 4，纯前端，零后端、无运行时外部服务请求
 - 文本类用户数据存 `localStorage`（键前缀 `gsr.`），图片二进制存 IndexedDB（`gsr-media`）
 - 生日卡与拼图使用原生 Canvas 2D 绘制，成品导出 PNG
 - 详细设计见 `docs/requirements/2026-11-07-原神角色工具-开发文档.md`

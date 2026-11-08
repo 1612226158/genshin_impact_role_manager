@@ -134,11 +134,16 @@ const stars = computed(() => '★'.repeat(props.character.star || 0))
   z-index: 3;
   left: 7px;
   top: 7px;
-  padding: 3px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
-  background: rgba(10, 26, 40, 0.72);
+  background: rgba(10, 26, 40, 0.32);
+  border: 1px solid rgba(237, 230, 214, 0.15);
   backdrop-filter: blur(2px);
 }
+.badge :deep(.el) { display: flex; align-items: center; justify-content: center; line-height: 1; }
 
 .flag {
   position: absolute;

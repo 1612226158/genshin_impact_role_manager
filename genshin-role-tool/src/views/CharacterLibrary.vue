@@ -1,16 +1,23 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import SearchBox from '@/components/SearchBox.vue'
 import FilterChips from '@/components/FilterChips.vue'
 import CharacterCard from '@/components/CharacterCard.vue'
+import StyledSelect from '@/components/StyledSelect.vue'
+import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
+import { useSettingsStore } from '@/stores/settings'
+import { useSmoothWheel } from '@/composables/useSmoothWheel'
 import { assetUrl } from '@/utils/asset'
 import { nationIcon, elementIcon } from '@/utils/element'
 
 const router = useRouter()
 const store = useCharacterStore()
+const settings = useSettingsStore()
+const editor = useEditorStore()
+useSmoothWheel(() => settings.settings.motion !== 'off')
 
 const nationOptions = computed(() =>
   store.nationOptions
@@ -44,7 +51,6 @@ const sortOptions = [
   { value: 'recent', label: '最近编辑' },
 ]
 
-const busy = ref(false)
 
 function openCharacter(c) {
   router.push(`/c/${c.id}`)
@@ -54,6 +60,15 @@ function toggleDir() {
   store.sort.dir = store.sort.dir === 'asc' ? 'desc' : 'asc'
 }
 
+function pinLeaving(el) {
+  el.style.left = `${el.offsetLeft}px`
+  el.style.top = `${el.offsetTop}px`
+  el.style.width = `${el.offsetWidth}px`
+  el.style.height = `${el.offsetHeight}px`
+}
+function unpin(el) {
+  for (const key of ['left', 'top', 'width', 'height']) el.style[key] = ''
+}
 const hiddenCount = computed(() => store.stats.hidden)
 </script>
 
@@ -66,17 +81,12 @@ const hiddenCount = computed(() => store.stats.hidden)
     >
       <SearchBox v-model="store.kw.text" />
 
-      <label class="sort">
-        <span>排序</span>
-        <select v-model="store.sort.key" aria-label="排序方式">
-          <option v-for="o in sortOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-        </select>
-      </label>
+      <StyledSelect v-model="store.sort.key" :options="sortOptions" label="排序方式" compact class="library-sort" />
       <button type="button" class="dir" :title="store.sort.dir === 'asc' ? '升序' : '降序'" @click="toggleDir">
         {{ store.sort.dir === 'asc' ? '↑' : '↓' }}
       </button>
 
-      <button type="button" class="gs-btn primary" @click="router.push('/c/new/edit')">
+      <button type="button" class="gs-btn primary" @click="editor.open('new', $event.currentTarget)">
         ＋ 新建角色
       </button>
       <button
@@ -132,12 +142,12 @@ const hiddenCount = computed(() => store.stats.hidden)
       <span v-if="store.kw.text" class="kw">关键词「{{ store.kw.text }}」</span>
     </div>
 
-    <section v-if="store.filtered.length" class="grid" :class="{ busy }">
+    <TransitionGroup tag="section" name="cards" class="grid" @before-leave="pinLeaving" @leave-cancelled="unpin" @after-leave="unpin">
       <button
         v-for="(c, i) in store.filtered"
         :key="c.id"
         type="button"
-        class="cell"
+        class="cell" :style="{ '--i': Math.min(i, 12) }"
         @click="openCharacter(c)"
       >
         <CharacterCard
@@ -147,9 +157,9 @@ const hiddenCount = computed(() => store.stats.hidden)
           :priority="i < 15"
         />
       </button>
-    </section>
+    </TransitionGroup>
 
-    <div v-else class="empty gs-panel">
+    <div v-if="!store.filtered.length" class="empty gs-panel">
       <p class="empty-title">没有匹配的角色</p>
       <p class="empty-desc">试试换个关键词，或清除当前筛选条件。</p>
       <button type="button" class="gs-btn" @click="store.resetFilters()">清除全部筛选</button>
@@ -158,33 +168,9 @@ const hiddenCount = computed(() => store.stats.hidden)
 </template>
 
 <style scoped>
-.sort {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--gs-line);
-  border-radius: 999px;
-  background: rgba(8, 24, 38, 0.6);
-  font-size: 12.5px;
-  color: var(--gs-ink-3);
-}
-
-.sort select {
-  border: none;
-  background: none;
-  outline: none;
-  color: var(--gs-ink);
-  font-size: 13px;
-  cursor: pointer;
-  max-width: 180px;
-}
-
-.sort select option {
-  background: #10293d;
-  color: var(--gs-ink);
-}
+.library-sort { width: 205px; }
+.page :deep(.head-extra) > .gs-btn { height: 36px; padding: 0 16px; line-height: 1; white-space: nowrap; }
+.page :deep(.head-extra) { align-items: center; }
 
 .dir {
   width: 36px;
@@ -224,16 +210,23 @@ const hiddenCount = computed(() => store.stats.hidden)
 }
 
 .grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
 }
 
 .cell {
+  min-width: 0;
   padding: 0;
   text-align: left;
   display: block;
 }
+
+.cards-move { transition: transform .38s cubic-bezier(.22,.8,.25,1); }
+.cards-enter-active { transition: opacity .24s ease, transform .3s var(--gs-ease); transition-delay: calc(var(--i) * 10ms); }
+.cards-leave-active { position: absolute; transition: opacity .18s ease, transform .22s ease; pointer-events: none; }
+.cards-enter-from, .cards-leave-to { opacity: 0; transform: translateY(12px) scale(.96); }
 
 .empty {
   padding: 56px 24px;

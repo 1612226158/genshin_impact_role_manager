@@ -29,7 +29,9 @@ try {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 
   console.log('1) 编辑角色并保存')
-  await openRoute(page, BASE, '/c/1055/edit')
+  await openRoute(page, BASE, '/c/1055')
+  await page.evaluate(() => [...document.querySelectorAll('.actions button')].find(b => b.textContent.trim() === '编辑').click())
+  await page.waitForFunction(() => Boolean(document.querySelector('dialog[open]')))
   await sleep(900)
   const found = await page.evaluate(() => {
     const el = [...document.querySelectorAll('input')].find((i) => i.value === '无害甜度')
@@ -66,7 +68,9 @@ try {
   check('撤销成功提示', await page.evaluate(() => document.body.innerText.includes('已撤销')))
 
   console.log('3) 新建自定义角色')
-  await openRoute(page, BASE, '/c/new/edit')
+  await openRoute(page, BASE, '/')
+  await page.evaluate(() => [...document.querySelectorAll('.head-extra button')].find(b => b.textContent.includes('新建角色')).click())
+  await page.waitForFunction(() => Boolean(document.querySelector('dialog[open]')))
   await sleep(900)
   await page.evaluate(() => {
     const name = [...document.querySelectorAll('input[type=text]')].find(

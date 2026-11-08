@@ -1,90 +1,56 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { canvasToBlob, loadImage, roundRect } from '@/utils/canvas'
+import { collageLayout, cropFraction, fittedRect } from '@/utils/collage'
 
 const props = defineProps({
   sources: { type: Array, default: () => [] },
   template: { type: String, default: 'grid2' },
+  fit: { type: String, default: 'contain' },
+  portraits: { type: Array, default: () => [] },
 })
 
 const canvasRef = ref(null)
 const busy = ref(false)
+let drawVersion = 0
 
-function layoutFor(t) {
-  const G = 10
-  if (t === 'grid2') {
-    const s = (1200 - G) / 2
-    return {
-      w: 1200,
-      h: 1200,
-      cells: [
-        [0, 0, s, s],
-        [s + G, 0, s, s],
-        [0, s + G, s, s],
-        [s + G, s + G, s, s],
-      ],
-    }
-  }
-  if (t === 'grid3') {
-    const s = (1200 - G * 2) / 3
-    const cells = []
-    for (let r = 0; r < 3; r += 1) {
-      for (let c = 0; c < 3; c += 1) {
-        cells.push([c * (s + G), r * (s + G), s, s])
-      }
-    }
-    return { w: 1200, h: 1200, cells }
-  }
-  if (t === 'strip3') {
-    const s = (1440 - G * 2) / 3
-    return {
-      w: 1080,
-      h: 1440,
-      cells: [0, 1, 2].map((i) => [0, i * (s + G), 1080, s]),
-    }
-  }
-  // hero
-  const bigW = 990
-  const s = (1000 - G) / 2
-  return {
-    w: 1600,
-    h: 1000,
-    cells: [
-      [0, 0, bigW, 1000],
-      [bigW + G, 0, s * 0.99, s],
-      [bigW + G + s, 0, (1600 - bigW - G - s) - G, s],
-      [bigW + G, s + G, s * 0.99, s],
-      [bigW + G + s, s + G, (1600 - bigW - G - s) - G, s],
-    ],
-  }
-}
-
-const layout = computed(() => layoutFor(props.template))
-
-function drawCover(ctx, img, x, y, w, h) {
-  const scale = Math.max(w / img.width, h / img.height)
-  const sw = w / scale
-  const sh = h / scale
-  const sx = (img.width - sw) / 2
-  // 立绘多为竖长构图，裁切偏向上部以保留头部
-  const bias = img.height > img.width ? 0.16 : 0.5
-  const sy = (img.height - sh) * bias
-  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h)
+function prepareImage(img, portrait) {
+  const fraction = cropFraction(img.width, img.height, portrait)
+  if (fraction === 1) return img
+  const layer = document.createElement('canvas')
+  layer.width = img.width
+  layer.height = Math.round(img.height * fraction)
+  const ctx = layer.getContext('2d')
+  ctx.drawImage(img, 0, 0)
+  ctx.globalCompositeOperation = 'destination-out'
+  const fade = ctx.createLinearGradient(0, layer.height * .82, 0, layer.height)
+  fade.addColorStop(0, 'rgba(0,0,0,0)')
+  fade.addColorStop(1, 'rgba(0,0,0,1)')
+  ctx.fillStyle = fade
+  ctx.fillRect(0, layer.height * .82, layer.width, layer.height * .18)
+  return layer
 }
 
 async function draw() {
   const canvas = canvasRef.value
   if (!canvas) return
-  const { w, h, cells } = layout.value
+  const version = ++drawVersion
+  const fit = props.fit
+  const srcs = props.sources.slice(0, 9)
+  const portraits = [...props.portraits]
+  const template = props.template
+  busy.value = true
+  // Load a snapshot first, then paint atomically. A newer selection owns the canvas.
+  const images = await Promise.all(srcs.map((src) => src ? loadImage(src).catch(() => null) : null))
+  if (version !== drawVersion) return
+  const prepared = images.map((img, i) => img ? prepareImage(img, portraits[i]) : null)
+  const { w, h, cells } = collageLayout(template, prepared.map(img => img ? img.width / img.height : 0.55))
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
 
   ctx.fillStyle = '#0b1b28'
   ctx.fillRect(0, 0, w, h)
-
-  busy.value = true
-  const srcs = props.sources.slice(0, cells.length)
 
   for (let i = 0; i < cells.length; i += 1) {
     const [x, y, cw, ch] = cells[i]
@@ -108,10 +74,11 @@ async function draw() {
       continue
     }
 
-    try {
-      const img = await loadImage(src)
-      drawCover(ctx, img, x, y, cw, ch)
-    } catch {
+    if (prepared[i]) {
+      const img = prepared[i]
+      const r = fittedRect(img.width, img.height, cw, ch, fit)
+      ctx.drawImage(img, x + r.x, y + r.y, r.w, r.h)
+    } else {
       ctx.fillStyle = 'rgba(255,255,255,0.04)'
       ctx.fillRect(x, y, cw, ch)
     }
@@ -129,7 +96,8 @@ async function exportBlob() {
 defineExpose({ exportBlob, redraw: draw })
 
 onMounted(draw)
-watch(() => [props.template, props.sources.join('|')], draw)
+watch(() => [props.template, props.fit, props.sources.join('|'), props.portraits.join('|')], draw)
+onBeforeUnmount(() => { drawVersion += 1 })
 </script>
 
 <template>

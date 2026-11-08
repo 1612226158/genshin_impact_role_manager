@@ -1,152 +1,135 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { elementColor } from '@/utils/element'
 
+const props = defineProps({ element: { type: String, default: '' }, motion: { type: Boolean, default: true } })
+const tint = computed(() => props.element ? elementColor(props.element) : '#417a9b')
 const canvasRef = ref(null)
-let ctx = null
-let ro = null
-
-/** 星点与光斑种子固定，保证每次渲染一致（避免刷新后布局跳动） */
+const running = ref(false)
+let ctx, observer, frame = 0, last = 0, clock = 0
+let width = 0, height = 0, stars = []
 let seed = 20261107
-function rnd() {
+const rnd = () => {
   seed = (seed * 9301 + 49297) % 233280
   return seed / 233280
 }
-
-function draw() {
-  const el = canvasRef.value
-  if (!el || !ctx) return
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
-  const w = el.clientWidth
-  const h = el.clientHeight
-  el.width = Math.floor(w * dpr)
-  el.height = Math.floor(h * dpr)
+function resize() {
+  const canvas = canvasRef.value
+  if (!ctx || !canvas) return
+  width = canvas.clientWidth
+  height = canvas.clientHeight
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+  canvas.width = Math.round(width * dpr)
+  canvas.height = Math.round(height * dpr)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.clearRect(0, 0, w, h)
-
   seed = 20261107
-  const count = Math.round((w * h) / 9000)
-  const total = Math.max(140, Math.min(320, count))
-
-  for (let i = 0; i < total; i += 1) {
-    const x = rnd() * w
-    const y = rnd() * h
-    const r = 0.35 + rnd() * 1.25
-    const a = 0.12 + rnd() * 0.6
+  stars = Array.from({ length: Math.min(180, Math.max(60, Math.round(width * height / 8500))) }, (_, i) => ({
+    x: rnd() * width, y: rnd() * height, r: .4 + rnd() * 1.1,
+    alpha: .12 + rnd() * .4, speed: 3 + rnd() * 9,
+    phase: rnd() * Math.PI * 2, sparkle: i % 23 === 0, drift: i % 4 === 0,
+  }))
+  draw()
+}
+function draw() {
+  if (!ctx || !width || !height) return
+  ctx.clearRect(0, 0, width, height)
+  for (const s of stars) {
+    const x = s.x + (s.drift ? Math.sin(clock * .2 + s.phase) * 8 : 0)
+    const y = s.drift ? ((s.y - clock * s.speed) % height + height) % height : s.y
+    ctx.fillStyle = s.drift ? tint.value : '#e2f0ff'
+    ctx.globalAlpha = s.alpha * (.8 + Math.sin(clock * .65 + s.phase) * .2)
     ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(226, 240, 255, ${a.toFixed(3)})`
+    if (s.sparkle) {
+      const r = s.r * 3.5
+      ctx.moveTo(x, y - r)
+      ctx.lineTo(x + r * .23, y - r * .23)
+      ctx.lineTo(x + r, y)
+      ctx.lineTo(x + r * .23, y + r * .23)
+      ctx.lineTo(x, y + r)
+      ctx.lineTo(x - r * .23, y + r * .23)
+      ctx.lineTo(x - r, y)
+      ctx.lineTo(x - r * .23, y - r * .23)
+      ctx.closePath()
+    } else ctx.arc(x, y, s.r, 0, Math.PI * 2)
     ctx.fill()
   }
-
-  // 少量偏金色的亮星，呼应金线
-  for (let i = 0; i < 18; i += 1) {
-    const x = rnd() * w
-    const y = rnd() * h
-    const r = 0.7 + rnd() * 1.1
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(242, 228, 196, ${(0.35 + rnd() * 0.4).toFixed(3)})`
-    ctx.fill()
+  ctx.globalAlpha = 1
+}
+function stop() {
+  cancelAnimationFrame(frame)
+  frame = 0
+  last = 0
+  running.value = false
+}
+function tick(now) {
+  if (!last) last = now
+  const elapsed = now - last
+  if (elapsed >= 1000 / 30) {
+    clock += Math.min(elapsed, 100) / 1000
+    last = now
+    draw()
+  }
+  frame = requestAnimationFrame(tick)
+}
+function sync() {
+  stop()
+  if (!ctx) return
+  // Disabled effects retain a static starfield, with no RAF loop.
+  draw()
+  const root = document.documentElement
+  const hidden = root.classList.contains('no-stars') || root.classList.contains('no-app')
+  if (props.motion && !document.hidden && !hidden) {
+    running.value = true
+    frame = requestAnimationFrame(tick)
   }
 }
-
+watch(() => props.motion, sync)
+watch(tint, draw)
 onMounted(() => {
-  ctx = canvasRef.value?.getContext('2d') || null
-  draw()
-  ro = new ResizeObserver(() => draw())
-  ro.observe(document.documentElement)
+  ctx = canvasRef.value.getContext('2d')
+  observer = new ResizeObserver(resize)
+  observer.observe(canvasRef.value)
+  document.addEventListener('visibilitychange', sync)
+  resize()
+  sync()
 })
-
 onBeforeUnmount(() => {
-  ro?.disconnect()
-  ro = null
+  stop()
+  observer?.disconnect()
+  document.removeEventListener('visibilitychange', sync)
   ctx = null
 })
 </script>
 
 <template>
-  <div class="starfield" aria-hidden="true">
-    <div class="bg-grad"></div>
-    <canvas ref="canvasRef" class="bg-stars"></canvas>
-    <div class="blob blob-a"></div>
-    <div class="blob blob-b"></div>
-    <div class="blob blob-c"></div>
+  <div class="starfield" :class="{ paused: !running }" :data-element="element || 'neutral'" :data-running="running" aria-hidden="true">
+    <div class="bg-grad" />
+    <Transition name="sky">
+      <div :key="element" class="element-sky" :style="{ '--scene-color': tint }" />
+    </Transition>
+    <canvas ref="canvasRef" class="bg-stars" />
+    <div class="horizon" />
   </div>
 </template>
 
 <style scoped>
-.starfield {
-  position: fixed;
-  inset: 0;
-  z-index: var(--gs-z-bg);
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.bg-grad {
-  position: absolute;
-  inset: 0;
+.starfield { position: fixed; inset: 0; z-index: var(--gs-z-bg); pointer-events: none; overflow: hidden; }
+.bg-grad, .element-sky, .bg-stars, .horizon { position: absolute; inset: 0; }
+.bg-grad { background: linear-gradient(170deg, #123350, #0c2438 38%, #071521); }
+.element-sky {
   background:
-    radial-gradient(120% 80% at 50% -10%, #16405f 0%, rgba(22, 64, 95, 0) 58%),
-    linear-gradient(170deg, var(--gs-bg-2) 0%, var(--gs-bg-1) 38%, var(--gs-bg-0) 100%);
+    radial-gradient(ellipse 80% 42% at 42% 51%, color-mix(in srgb, var(--scene-color) 30%, transparent), transparent 80%),
+    radial-gradient(ellipse 65% 85% at 18% 22%, color-mix(in srgb, var(--scene-color) 19%, transparent), transparent 85%),
+    linear-gradient(180deg, transparent, color-mix(in srgb, var(--scene-color) 9%, transparent) 62%, transparent);
 }
-
-.bg-stars {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+.bg-stars { width: 100%; height: 100%; }
+.horizon {
+  inset: 36% -20% 0;
+  background: radial-gradient(ellipse at 50% 75%, rgba(211,188,142,.05), transparent 60%);
+  animation: breathe 18s ease-in-out infinite alternate;
 }
-
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.5;
-  animation: breathe 16s ease-in-out infinite;
-}
-
-.blob-a {
-  width: 46vw;
-  height: 46vw;
-  left: -10vw;
-  top: -12vw;
-  background: radial-gradient(circle, rgba(58, 138, 176, 0.35), transparent 68%);
-}
-
-.blob-b {
-  width: 38vw;
-  height: 38vw;
-  right: -8vw;
-  top: 18vh;
-  background: radial-gradient(circle, rgba(122, 96, 156, 0.24), transparent 70%);
-  animation-delay: -5s;
-}
-
-.blob-c {
-  width: 52vw;
-  height: 40vw;
-  left: 22vw;
-  bottom: -18vw;
-  background: radial-gradient(circle, rgba(211, 188, 142, 0.14), transparent 72%);
-  animation-delay: -9s;
-}
-
-@keyframes breathe {
-  0%,
-  100% {
-    transform: scale(1) translateY(0);
-    opacity: 0.42;
-  }
-  50% {
-    transform: scale(1.08) translateY(-12px);
-    opacity: 0.62;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .blob {
-    animation: none;
-  }
-}
+.paused .horizon { animation-play-state: paused; }
+@keyframes breathe { to { transform: translateY(-16px); opacity: .5; } }
+.sky-enter-active, .sky-leave-active { transition: opacity .65s ease; }
+.sky-enter-from, .sky-leave-to { opacity: 0; }
 </style>

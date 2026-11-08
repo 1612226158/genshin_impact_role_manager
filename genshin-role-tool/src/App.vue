@@ -1,11 +1,20 @@
 <script setup>
+import { computed, defineAsyncComponent } from 'vue'
+import { useRoute } from 'vue-router'
 import Starfield from '@/components/Starfield.vue'
 import TopBar from '@/components/TopBar.vue'
 import ToastHost from '@/components/ToastHost.vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useCharacterStore } from '@/stores/character'
+import { useEditorStore } from '@/stores/editor'
+const CharacterEditorModal = defineAsyncComponent(() => import('@/components/CharacterEditorModal.vue'))
+const editor = useEditorStore()
 
 // 应用根部激活动画开关监听：无论当前在哪个路由，<html>.no-motion 都随设置即时生效
-useSettingsStore()
+const settings = useSettingsStore()
+const route = useRoute()
+const characters = useCharacterStore()
+const sceneElement = computed(() => characters.get(route.params.id)?.element || '')
 
 // 诊断开关：?nostarapp=1 不渲染星空组件（隔离 ResizeObserver + fixed canvas）
 //           ?noview=1  不渲染路由视图与页脚（只留顶栏，隔离各页面内容）
@@ -14,7 +23,7 @@ const noView = new URLSearchParams(location.search).has('noview')
 </script>
 
 <template>
-  <Starfield v-if="!noStarApp" />
+  <Starfield v-if="!noStarApp" :element="sceneElement" :motion="settings.settings.motion !== 'off'" />
   <TopBar />
   <main v-if="!noView">
     <RouterView v-slot="{ Component }">
@@ -41,6 +50,7 @@ const noView = new URLSearchParams(location.search).has('noview')
     </p>
   </footer>
   <ToastHost />
+  <CharacterEditorModal v-if="editor.characterId" :key="editor.characterId" :character-id="editor.characterId" :return-focus="editor.opener" @close="editor.close" />
 </template>
 
 <style scoped>

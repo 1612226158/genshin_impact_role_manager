@@ -33,6 +33,8 @@ try {
     await page.evaluate((items) => localStorage.setItem('gsr.album.v1', JSON.stringify(items)), ALBUM_ITEMS)
     await page.reload({ waitUntil: 'domcontentloaded' })
     await sleep(2000)
+    await page.click('[role="combobox"][aria-label="模板"]')
+    await page.evaluate(() => [...document.querySelectorAll('[role="option"]')].find(e => e.textContent.includes('四宫格')).click())
     await page.evaluate(() => {
       const tiles = [...document.querySelectorAll('.tile')]
       for (const t of tiles.slice(0, 4)) t.click()

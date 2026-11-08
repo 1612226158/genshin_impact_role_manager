@@ -1,7 +1,9 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PageHead from '@/components/PageHead.vue'
-import CollageCanvas from '@/components/CollageCanvas.vue'
+import CollageEditor from '@/components/CollageEditor.vue'
+import ArtImage from '@/components/ArtImage.vue'
+import StyledSelect from '@/components/StyledSelect.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAlbumStore } from '@/stores/album'
 import { useToastStore } from '@/stores/toast'
@@ -23,6 +25,22 @@ const FILTERS = [
 const filtered = computed(() =>
   filter.value === '全部' ? album.list : album.list.filter((i) => i.kind === filter.value)
 )
+
+const galleryRef = ref(null)
+const columnCount = ref(4)
+const galleryColumns = computed(() => {
+  const columns = Array.from({ length: columnCount.value }, () => [])
+  filtered.value.forEach((item, i) => columns[i % columns.length].push(item))
+  return columns
+})
+let galleryObserver
+onMounted(() => {
+  galleryObserver = new ResizeObserver(([entry]) => {
+    columnCount.value = Math.max(2, Math.min(5, Math.floor((entry.contentRect.width + 14) / 199)))
+  })
+  galleryObserver.observe(galleryRef.value)
+})
+onBeforeUnmount(() => galleryObserver?.disconnect())
 
 /* ---------- 上传 ---------- */
 const fileInput = ref(null)
@@ -56,30 +74,54 @@ function onDrop(e) {
 
 /* ---------- 选择与拼图 ---------- */
 const selected = ref([])
-const template = ref('grid2')
+const template = ref('natural')
+const artMode = ref('portrait')
+const ART_MODES = [{ value: 'portrait', label: '人物预览 · 上 2/3 渐隐' }, { value: 'full', label: '完整原图' }]
+const FIT_MODES = [{ value: 'contain', label: '完整显示' }, { value: 'cover', label: '铺满裁切' }]
+const imageFit = ref('contain')
 const collageRef = ref(null)
 const savingCollage = ref(false)
 
 const TEMPLATES = [
+  { key: 'natural', label: '原比例并排', slots: 9 },
   { key: 'grid2', label: '四宫格 2×2', slots: 4 },
   { key: 'grid3', label: '九宫格 3×3', slots: 9 },
   { key: 'strip3', label: '长条三连 1×3', slots: 3 },
   { key: 'hero', label: '主图 + 四小图', slots: 5 },
 ]
 
-const slots = computed(() => TEMPLATES.find((t) => t.key === template.value)?.slots || 4)
-const emptySlots = computed(() => Math.max(0, slots.value - selected.value.length))
+const slots = computed(() => template.value === 'natural' ? Math.max(3, selected.value.length) : TEMPLATES.find((t) => t.key === template.value)?.slots || 4)
+const chosenCount = computed(() => selected.value.filter(Boolean).length)
+const emptySlots = computed(() => slots.value - selected.value.slice(0, slots.value).filter(Boolean).length)
+const hiddenCount = computed(() => selected.value.slice(slots.value).filter(Boolean).length)
+
+watch(template, () => {
+  if (template.value === 'natural') return
+  const capacity = TEMPLATES.find(t => t.key === template.value)?.slots || 4
+  const next = Array.from({ length: Math.max(capacity, selected.value.length) }, (_, i) => selected.value[i] || null)
+  for (let i = capacity; i < next.length; i++) {
+    if (!next[i]) continue
+    const free = next.findIndex((id, index) => index < capacity && !id)
+    if (free < 0) break
+    next[free] = next[i]
+    next[i] = null
+  }
+  while (next.length > capacity && !next.at(-1)) next.pop()
+  selected.value = next
+})
 
 function toggleSelect(item) {
   const i = selected.value.indexOf(item.aid)
   if (i >= 0) {
-    selected.value.splice(i, 1)
+    selected.value[i] = null
   } else {
-    if (selected.value.length >= 9) {
+    if (chosenCount.value >= 9) {
       toast.warn('最多选择 9 张')
       return
     }
-    selected.value.push(item.aid)
+    const empty = selected.value.indexOf(null)
+    if (empty >= 0) selected.value[empty] = item.aid
+    else selected.value.push(item.aid)
   }
 }
 
@@ -101,16 +143,19 @@ const selectedItems = computed(() =>
   selected.value.map((aid) => album.get(aid)).filter(Boolean)
 )
 
-const collageSources = computed(() =>
-  selectedItems.value.map((i) => urls[i.aid]).filter(Boolean)
-)
+const collageItems = computed(() => Array.from({ length: Math.max(slots.value, selected.value.length) }, (_, index) => {
+  const item = selected.value[index] ? album.get(selected.value[index]) : null
+  return item ? { ...item, src: urls[item.aid] || '' } : null
+}))
+function reorder(ids) { selected.value = ids }
+function removeSelected(aid) { selected.value = selected.value.map(id => id === aid ? null : id) }
 
 function clearSelection() {
   selected.value = []
 }
 
 async function exportCollage() {
-  if (!selected.value.length) {
+  if (!chosenCount.value) {
     toast.warn('先选择要拼图的图片')
     return
   }
@@ -164,7 +209,7 @@ const deleteTarget = ref(null)
 async function doDelete() {
   if (!deleteTarget.value) return
   await album.remove(deleteTarget.value.aid)
-  selected.value = selected.value.filter((a) => a !== deleteTarget.value.aid)
+  removeSelected(deleteTarget.value.aid)
   deleteTarget.value = null
   closeViewer()
   toast.ok('已删除该相册项')
@@ -211,12 +256,12 @@ watch(filter, () => {
         @change="onPick"
       />
       <button
-        v-if="selected.length"
+        v-if="chosenCount"
         type="button"
         class="gs-btn"
         @click="clearSelection"
       >
-        清空选择 ({{ selected.length }})
+        清空选择 ({{ chosenCount }})
       </button>
     </PageHead>
 
@@ -236,17 +281,24 @@ watch(filter, () => {
       <span class="tip-inline">点击图片加入拼图，拖拽文件到页面即可上传（单张 ≤ 10MB）</span>
     </div>
 
+    <div class="album-toolbar">
+      <StyledSelect v-model="artMode" :options="ART_MODES" label="画面" />
+      <p>人物预览仅裁切竖长收藏海报；查看和下载始终使用原图。</p>
+    </div>
+
     <div class="layout">
-      <section class="gallery">
-        <div v-if="filtered.length" class="grid">
+      <section ref="galleryRef" class="gallery">
+        <div v-if="filtered.length" class="grid" :style="{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }">
+          <div v-for="(column, col) in galleryColumns" :key="col" class="masonry-column">
           <article
-            v-for="it in filtered"
+            v-for="it in column"
             :key="it.aid"
             class="tile"
             :class="{ picked: orderOf(it.aid) }"
-            @click="toggleSelect(it)"
+            role="button" tabindex="0" :aria-pressed="!!orderOf(it.aid)" :aria-label="`选择${it.title || '图片'}加入拼图`"
+            @click="toggleSelect(it)" @keydown.enter.self="toggleSelect(it)" @keydown.space.self.prevent="toggleSelect(it)"
           >
-            <img v-if="urls[it.aid]" :src="urls[it.aid]" :alt="it.title" loading="lazy" />
+            <ArtImage v-if="urls[it.aid]" :src="urls[it.aid]" :alt="it.title" :portrait="artMode === 'portrait' && it.kind === 'official'" lazy />
             <div v-else class="ph">读取中…</div>
 
             <span v-if="orderOf(it.aid)" class="order nums">{{ orderOf(it.aid) }}</span>
@@ -260,6 +312,7 @@ watch(filter, () => {
 
             <p class="cap">{{ it.title || it.label || '未命名' }}</p>
           </article>
+          </div>
         </div>
 
         <div v-else class="empty gs-panel">
@@ -274,36 +327,30 @@ watch(filter, () => {
         <div class="panel gs-panel">
           <header class="phead">
             <h2>拼图</h2>
-            <span class="count">{{ selected.length }} / {{ slots }}</span>
+            <span class="count">{{ chosenCount }} / {{ slots }}</span>
           </header>
 
-          <CollageCanvas
-            ref="collageRef"
-            :sources="collageSources"
-            :template="template"
+          <CollageEditor
+            ref="collageRef" :items="collageItems" :template="template" :fit="imageFit" :portrait="artMode === 'portrait'"
+            @reorder="reorder" @remove="removeSelected"
           />
-
-          <p v-if="emptySlots" class="tip">还有 {{ emptySlots }} 格未填，导出会保留虚线空位。</p>
-
-          <label class="fld">
-            <span>模板</span>
-            <select v-model="template">
-              <option v-for="t in TEMPLATES" :key="t.key" :value="t.key">{{ t.label }}</option>
-            </select>
-          </label>
+          <p v-if="emptySlots" class="tip">还有 {{ emptySlots }} 格未填，可继续选择图片。</p>
+          <p v-if="hiddenCount" class="tip">另有 {{ hiddenCount }} 张超出当前模板容量，可换更大的模板或移除部分图片。</p>
+          <StyledSelect v-model="template" :options="TEMPLATES.map(t => ({ value: t.key, label: t.label }))" label="模板" />
+          <StyledSelect v-model="imageFit" :options="FIT_MODES" label="图片显示" />
 
           <ul v-if="selectedItems.length" class="orderlist">
             <li v-for="(it, i) in selectedItems" :key="it.aid">
-              <span class="idx nums">{{ i + 1 }}</span>
+              <span class="idx nums">{{ orderOf(it.aid) }}</span>
               <span class="ot">{{ it.title || it.label || '未命名' }}</span>
-              <button type="button" class="mv" @click="move(it.aid, -1)">↑</button>
-              <button type="button" class="mv" @click="move(it.aid, 1)">↓</button>
+              <button type="button" class="mv" :aria-label="`前移${it.title}`" @click="move(it.aid, -1)">↑</button>
+              <button type="button" class="mv" :aria-label="`后移${it.title}`" @click="move(it.aid, 1)">↓</button>
             </li>
           </ul>
 
           <div class="ops">
-            <button type="button" class="gs-btn primary" @click="exportCollage">导出 PNG</button>
-            <button type="button" class="gs-btn" :disabled="savingCollage" @click="saveCollage">
+            <button type="button" class="gs-btn primary" :disabled="!chosenCount" @click="exportCollage">导出 PNG</button>
+            <button type="button" class="gs-btn" :disabled="savingCollage || !chosenCount" @click="saveCollage">
               {{ savingCollage ? '保存中…' : '存入相册' }}
             </button>
           </div>
@@ -382,14 +429,20 @@ watch(filter, () => {
   align-items: start;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 12px;
-}
+.album-toolbar { display: flex; align-items: end; gap: 18px; margin: 0 0 20px; }
+.album-toolbar .styled-select { width: 280px; flex-shrink: 0; }
+.album-toolbar p { color: var(--gs-ink-3); font-size: 12px; padding-bottom: 10px; }
+.gallery { min-width: 0; }
+.grid { display: grid; gap: 14px; align-items: start; }
+.masonry-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 
 .tile {
   position: relative;
+  display: inline-block;
+  width: 100%;
+  margin: 0;
+  vertical-align: top;
+  break-inside: avoid;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--gs-line);
@@ -405,14 +458,6 @@ watch(filter, () => {
 .tile.picked {
   border-color: var(--gs-gold);
   box-shadow: 0 0 0 1px var(--gs-gold), 0 8px 22px rgba(0, 0, 0, 0.4);
-}
-
-.tile img {
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
-  display: block;
-  background: #10293d;
 }
 
 .ph {
@@ -460,7 +505,8 @@ watch(filter, () => {
   transition: opacity 0.18s var(--gs-ease);
 }
 
-.tile:hover .tools {
+.tile:hover .tools,
+.tile:focus-within .tools {
   opacity: 1;
 }
 
@@ -540,31 +586,6 @@ watch(filter, () => {
 .tip {
   font-size: 11.5px;
   color: var(--gs-gold-deep);
-}
-
-.fld {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.fld > span {
-  font-size: 11.5px;
-  color: var(--gs-ink-3);
-}
-
-.fld select {
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--gs-line);
-  background: rgba(6, 20, 32, 0.6);
-  color: var(--gs-ink);
-  font-size: 13px;
-  outline: none;
-}
-
-.fld option {
-  background: #10293d;
 }
 
 .orderlist {
@@ -690,6 +711,13 @@ watch(filter, () => {
   color: var(--gs-ink-3);
 }
 
+@media (hover: none) { .tools { opacity: 1; } }
+@media (max-width: 600px) {
+  .grid, .masonry-column { gap: 10px; }
+  .album-toolbar { display: block; }
+  .album-toolbar .styled-select { width: 100%; }
+  .album-toolbar p { padding: 8px 0 0; }
+}
 @media (max-width: 1200px) {
   .layout {
     grid-template-columns: 1fr;
