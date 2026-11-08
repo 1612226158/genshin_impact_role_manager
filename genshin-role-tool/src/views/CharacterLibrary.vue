@@ -6,9 +6,21 @@ import SearchBox from '@/components/SearchBox.vue'
 import FilterChips from '@/components/FilterChips.vue'
 import CharacterCard from '@/components/CharacterCard.vue'
 import { useCharacterStore } from '@/stores/character'
+import { assetUrl } from '@/utils/asset'
+import { nationIcon, elementIcon } from '@/utils/element'
 
 const router = useRouter()
 const store = useCharacterStore()
+
+const nationOptions = computed(() =>
+  store.nationOptions
+    .map((o) => ({ ...o, icon: nationIcon(o.value) ? assetUrl(nationIcon(o.value)) : '' }))
+)
+
+const elementOptions = computed(() =>
+  store.elementOptions
+    .map((o) => ({ ...o, icon: elementIcon(o.value) ? assetUrl(elementIcon(o.value)) : '' }))
+)
 
 const starOptions = computed(() => {
   const list = [{ value: '5', count: store.all.filter((c) => c.star === 5).length }]
@@ -80,14 +92,14 @@ const hiddenCount = computed(() => store.stats.hidden)
     <section class="filters gs-panel">
       <FilterChips
         label="国度"
-        :options="store.nationOptions"
+        :options="nationOptions"
         :model-value="store.filters.nation"
         all-label="全部国度"
         @update:model-value="store.filters.nation = $event"
       />
       <FilterChips
         label="元素"
-        :options="store.elementOptions"
+        :options="elementOptions"
         :model-value="store.filters.element"
         all-label="全部元素"
         @update:model-value="store.filters.element = $event"

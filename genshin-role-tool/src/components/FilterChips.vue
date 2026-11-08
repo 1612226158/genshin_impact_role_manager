@@ -30,6 +30,7 @@ const emit = defineEmits(['update:modelValue'])
         :class="{ 'is-on': String(modelValue) === String(o.value) }"
         @click="emit('update:modelValue', o.value)"
       >
+        <img v-if="o.icon" class="chip-icon" :src="o.icon" alt="" draggable="false" />
         {{ o.value }}
         <em v-if="o.count != null" class="cnt">{{ o.count }}</em>
       </button>
@@ -58,6 +59,13 @@ const emit = defineEmits(['update:modelValue'])
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.chip-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 3px rgba(211, 188, 142, 0.35));
 }
 
 .cnt {

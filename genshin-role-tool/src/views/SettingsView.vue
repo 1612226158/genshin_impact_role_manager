@@ -201,6 +201,18 @@ const storageText = computed(() => (settings.storageOk ? '可用' : '不可用�
           <dd>原神官网角色页与米游社观测枢</dd>
         </div>
         <div>
+          <dt>图标素材</dt>
+          <dd>
+            元素与国度图标由画师 DanielPYC 手绘并无偿分享，
+            <a
+              href="https://www.miyoushe.com/ys/collection/2085279"
+              target="_blank"
+              rel="noopener noreferrer"
+              >米游社合集</a
+            >
+          </dd>
+        </div>
+        <div>
           <dt>技术栈</dt>
           <dd>Vue 3 + Vite，纯前端，无后端服务、无网络请求</dd>
         </div>

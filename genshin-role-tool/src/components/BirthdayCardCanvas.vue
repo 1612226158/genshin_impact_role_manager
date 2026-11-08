@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { assetUrl } from '@/utils/asset'
-import { elementColor } from '@/utils/element'
+import { elementColor, elementIcon } from '@/utils/element'
 import {
   canvasToBlob,
   drawStars,
@@ -86,7 +86,28 @@ async function draw() {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
 
-  const topY = isSquare ? 108 : 132
+  // 元素图标（画师 DanielPYC 绘制）
+  const iconPath = elementIcon(c.element)
+  const iconSize = isSquare ? 58 : 66
+  const iconY = isSquare ? 62 : 78
+  let drewIcon = false
+  if (iconPath) {
+    try {
+      const icon = await loadImage(assetUrl(iconPath))
+      ctx.drawImage(icon, w / 2 - iconSize / 2, iconY - iconSize / 2, iconSize, iconSize)
+      drewIcon = true
+    } catch {
+      drewIcon = false
+    }
+  }
+
+  // 有图标时布局固定预留图标空间，避免图标加载失败导致文字跳动
+  const hasIcon = Boolean(iconPath)
+  const topY = hasIcon
+    ? iconY + iconSize / 2 + 26 + (isSquare ? 22 : 34)
+    : isSquare
+      ? 108
+      : 132
   ctx.fillStyle = rgba(el, 0.92)
   ctx.font = '600 26px "Noto Serif SC", "Songti SC", serif'
   ctx.letterSpacing = '10px'

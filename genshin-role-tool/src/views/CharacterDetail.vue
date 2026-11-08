@@ -6,7 +6,7 @@ import { useCharacterStore } from '@/stores/character'
 import { useAlbumStore } from '@/stores/album'
 import { useToastStore } from '@/stores/toast'
 import { assetUrl } from '@/utils/asset'
-import { elementColor } from '@/utils/element'
+import { elementColor, nationIcon } from '@/utils/element'
 
 const route = useRoute()
 const router = useRouter()
@@ -37,6 +37,11 @@ watch(
 const paintingSrc = computed(() => assetUrl(paintings.value[activePainting.value]?.file || ''))
 
 const elColor = computed(() => elementColor(character.value?.element))
+
+const nationIconSrc = computed(() => {
+  const p = nationIcon(character.value?.nation)
+  return p ? assetUrl(p) : ''
+})
 
 const statRows = computed(() => {
   const c = character.value
@@ -131,6 +136,7 @@ function avatarOf(c) {
     <header class="dhead">
       <button type="button" class="back" aria-label="返回角色库" @click="router.push('/')">←</button>
       <ElementBadge :element="character.element" size="sm" />
+      <img v-if="nationIconSrc" class="crumb-icon" :src="nationIconSrc" alt="" draggable="false" />
       <span class="crumb">{{ character.nation }} / {{ character.name }}</span>
     </header>
 
@@ -331,6 +337,13 @@ function avatarOf(c) {
   font-size: 13px;
   color: var(--gs-ink-2);
   letter-spacing: 0.04em;
+}
+
+.crumb-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 4px rgba(211, 188, 142, 0.4));
 }
 
 /* 左侧角色头像切换栏 */

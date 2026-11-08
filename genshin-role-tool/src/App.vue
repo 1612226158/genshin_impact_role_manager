@@ -20,6 +20,16 @@ import ToastHost from '@/components/ToastHost.vue'
       <span class="gold">miHoYo / HoYoverse</span>
       所有，本项目仅供个人学习研究，不作商业用途。
     </p>
+    <p class="credit">
+      元素与国度图标由画师
+      <a
+        href="https://www.miyoushe.com/ys/collection/2085279"
+        target="_blank"
+        rel="noopener noreferrer"
+        >DanielPYC</a
+      >
+      手绘并无偿分享（米游社）
+    </p>
   </footer>
   <ToastHost />
 </template>
@@ -45,5 +55,11 @@ main {
 
 .gold {
   color: var(--gs-gold);
+}
+
+.credit {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.85;
 }
 </style>
