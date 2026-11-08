@@ -55,21 +55,26 @@ export function launchBrowser({ width = 1600, height = 1050 } = {}) {
   })
 }
 
-/** 等待页面图片与字体就绪（headless 下 lazy 图片与解码有延迟，必须显式等待） */
-export async function waitAssets(page) {
-  await page.evaluate(async () => {
-    await Promise.all(
-      [...document.images].map((img) =>
-        img.complete
-          ? Promise.resolve()
-          : new Promise((res) => {
-              img.addEventListener('load', res, { once: true })
-              img.addEventListener('error', res, { once: true })
-            })
+/** 等待页面图片与字体就绪。
+ *  ⚠️ 页面存在视口外的 lazy 图片（如头像栏 138 张）永远不会加载，
+ *  因此必须设置总时长上限（默认 8s），否则脚本会无限挂起。 */
+export async function waitAssets(page, cap = 8000) {
+  await Promise.race([
+    page.evaluate(async () => {
+      await Promise.all(
+        [...document.images].map((img) =>
+          img.complete
+            ? Promise.resolve()
+            : new Promise((res) => {
+                img.addEventListener('load', res, { once: true })
+                img.addEventListener('error', res, { once: true })
+              })
+        )
       )
-    )
-    await document.fonts.ready
-  })
+      await document.fonts.ready
+    }),
+    sleep(cap),
+  ])
 }
 
 /**

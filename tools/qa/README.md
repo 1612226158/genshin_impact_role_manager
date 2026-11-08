@@ -28,6 +28,7 @@ npm install
 | `node export-canvas.mjs card\|collage` | 导出生日卡 / 2×2 拼图的**真实成品 PNG** |
 | `node frames.mjs <视频> [间隔秒] [输出目录]` | 视频抽帧（pipe 模式） |
 | `node contact-sheet.mjs <帧目录> [输出]` | 抽帧拼成带时间戳的总览图 |
+| `node inspect-page.mjs <URL>` | 外部页面勘察：无头加载 JS 站点，输出标题/文本/图片响应清单 |
 
 ## 已知坑（勿重蹈）
 

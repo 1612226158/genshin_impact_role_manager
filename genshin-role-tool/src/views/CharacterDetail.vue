@@ -77,6 +77,17 @@ const cvRows = computed(() => {
 const storySections = computed(() => character.value?.story?.sections || [])
 const albumItems = computed(() => album.byCharacter(route.params.id))
 
+/* 资料阅读器：分节目录 + 正文 */
+const activeSection = ref(0)
+const readerRef = ref(null)
+
+function jumpSection(i) {
+  activeSection.value = i
+  readerRef.value
+    ?.querySelector(`#story-sec-${i}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 const collected = computed(() => {
   const c = character.value
   if (!c || !paintings.value.length) return false
@@ -248,11 +259,26 @@ function avatarOf(c) {
         </template>
 
         <template v-else-if="tab === 'story'">
-          <div v-if="storySections.length" class="story">
-            <section v-for="(s, i) in storySections" :key="i">
-              <h3>{{ s.section }}</h3>
-              <p>{{ s.text }}</p>
-            </section>
+          <!-- 资料阅读器：左侧分节目录 + 右侧连续正文（对齐游戏内资料页） -->
+          <div v-if="storySections.length" class="reader">
+            <nav class="reader-index" aria-label="故事分节">
+              <button
+                v-for="(s, i) in storySections"
+                :key="i"
+                type="button"
+                :class="{ on: i === activeSection }"
+                :title="s.section"
+                @click="jumpSection(i)"
+              >
+                {{ s.section }}
+              </button>
+            </nav>
+            <div ref="readerRef" class="reader-text">
+              <section v-for="(s, i) in storySections" :key="i" :id="`story-sec-${i}`">
+                <h3>{{ s.section }}</h3>
+                <p>{{ s.text }}</p>
+              </section>
+            </div>
           </div>
           <p v-else class="empty-story">官方未提供背景故事文本。</p>
         </template>
@@ -433,7 +459,7 @@ function avatarOf(c) {
 
 /* 故事 / 相册页签：立绘保留在左（收窄），右侧换宽版文字面板（内部滚动） */
 .body.wide {
-  grid-template-columns: 46px 104px minmax(260px, 360px) minmax(460px, 1fr);
+  grid-template-columns: 46px 104px minmax(240px, 340px) minmax(500px, 1fr);
 }
 
 .body.wide .side {
@@ -671,11 +697,57 @@ function avatarOf(c) {
   font-size: 11.5px;
 }
 
-.story section {
-  margin-bottom: 22px;
+/* 资料阅读器：左目录 + 右正文 */
+.reader {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
 }
 
-.story h3 {
+.reader-index {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reader-index button {
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--gs-ink-3);
+  padding: 7px 10px;
+  border-left: 2px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.18s var(--gs-ease), background 0.18s var(--gs-ease),
+    border-color 0.18s var(--gs-ease);
+}
+
+.reader-index button:hover {
+  color: var(--gs-ink-2);
+  background: rgba(211, 188, 142, 0.06);
+}
+
+.reader-index button.on {
+  color: var(--gs-gold-hi);
+  border-left-color: var(--gs-gold);
+  background: rgba(211, 188, 142, 0.1);
+}
+
+.reader-text {
+  max-width: 640px;
+}
+
+.reader-text section {
+  margin-bottom: 22px;
+  scroll-margin-top: 10px;
+}
+
+.reader-text h3 {
   font-size: 15px;
   color: var(--gs-gold);
   letter-spacing: 0.1em;
@@ -684,24 +756,15 @@ function avatarOf(c) {
   margin: 26px 0 12px;
 }
 
-.story h3:first-child {
+.reader-text section:first-child h3 {
   margin-top: 0;
 }
 
-.story p {
+.reader-text p {
   font-size: 15px;
   line-height: 2.05;
   color: var(--gs-ink);
   white-space: pre-wrap;
-}
-
-/* 长文阅读版心 */
-.story {
-  max-width: 700px;
-}
-
-.story section + section {
-  padding-top: 4px;
 }
 
 .empty-story {
@@ -899,8 +962,27 @@ function avatarOf(c) {
   .body.wide .side {
     max-height: none;
     overflow: visible;
-    border-left: none;
     padding-left: 0;
+  }
+  .reader {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .reader-index {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--gs-line);
+  }
+  .reader-index button {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    flex-shrink: 0;
+    padding: 6px 10px;
+  }
+  .reader-index button.on {
+    border-bottom-color: var(--gs-gold);
   }
   .rail {
     flex-direction: row;
