@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head><meta charset="UTF-8" /><title>诊断 · popstate 监听</title></head>
+  <body style="background:#0b1b28;color:#d3bc8e;font:15px system-ui;padding:40px">
+    <p>本页只做一件事：注册 popstate 监听（不调用任何 history 写操作）。</p>
+    <p id="st">listener registered</p>
+    <script>
+      window.addEventListener('popstate', (e) => {
+        document.getElementById('st').textContent = 'popstate fired'
+      })
+    </script>
+  </body>
+</html>
