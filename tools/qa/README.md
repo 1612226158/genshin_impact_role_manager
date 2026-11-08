@@ -33,6 +33,8 @@ npm install
 | `monitor-chromium.ps1 [秒]` | 监视 Chromium 系进程创建（含父进程与完整命令行），输出 monitor-log.txt。⚠️ 本文件必须保持纯 ASCII |
 | `net-monitor.mjs [静置秒] [路径]` | 页面静置期间的请求监视（检测注入脚本心跳、favicon 循环等） |
 | `diag-flags.mjs` | 断言诊断开关（?flat=1 / ?nostar=1）在 computed style 层面生效 |
+| `dev-nohmr.mjs` | 以禁用 HMR WebSocket 的模式启动 dev server（配合 vite.config 的 NO_HMR 环境变量） |
+| `bare.html`（public/ 下） | 零脚本静态诊断页，用于二分「dev server 本身 vs 应用页面」 |
 
 ## 已知坑（勿重蹈）
 
