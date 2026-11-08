@@ -113,6 +113,10 @@ html.no-stars canvas.bg-stars {
   display: none;
 }
 
+html.no-app #app {
+  display: none !important;
+}
+
 .gs-line-t {
   border-top: 1px solid var(--gs-line);
 }
