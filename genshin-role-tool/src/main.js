@@ -22,6 +22,25 @@ if (diag.has('noss')) {
 if (diag.has('nojs')) {
   // 诊断：不加载/不挂载应用，页面只执行本模块
   console.log('[diag] nojs mode: app not mounted')
+} else if (diag.has('minimal')) {
+  // 诊断：最小 Vue 应用（单个 render 函数），可选安装 router —— 定位触发点在
+  // 「Vue 挂载本身」还是「vue-router 的全局监听」
+  const { createApp, h } = await import('vue')
+  const app = createApp({
+    render: () =>
+      h(
+        'div',
+        { style: 'padding:40px;color:#d3bc8e;font:14px system-ui,sans-serif' },
+        'minimal vue app（诊断模式）'
+      ),
+  })
+  if (diag.has('withrouter')) {
+    const { createPinia } = await import('pinia')
+    const { default: router } = await import('./router')
+    app.use(createPinia())
+    app.use(router)
+  }
+  app.mount('#app')
 } else {
   const [{ createApp }, { createPinia }, { default: App }, { default: router }] =
     await Promise.all([import('vue'), import('pinia'), import('./App.vue'), import('./router')])
