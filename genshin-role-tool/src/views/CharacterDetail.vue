@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ElementBadge from '@/components/ElementBadge.vue'
 import { useCharacterStore } from '@/stores/character'
@@ -21,21 +21,20 @@ const character = computed(() => store.get(route.params.id))
 const paintings = computed(() => character.value?.images?.paintings || [])
 const activePainting = ref(0)
 
+const railRef = ref(null)
+
 watch(
   () => route.params.id,
-  () => {
+  async () => {
     activePainting.value = 0
     tab.value = 'stats'
+    // 左侧头像栏把当前角色滚进可视区
+    await nextTick()
+    railRef.value?.querySelector('.rail-item.on')?.scrollIntoView({ block: 'nearest' })
   }
 )
 
 const paintingSrc = computed(() => assetUrl(paintings.value[activePainting.value]?.file || ''))
-
-const idx = computed(() => store.all.findIndex((c) => String(c.id) === String(route.params.id)))
-const prev = computed(() => (idx.value > 0 ? store.all[idx.value - 1] : null))
-const next = computed(() =>
-  idx.value >= 0 && idx.value < store.all.length - 1 ? store.all[idx.value + 1] : null
-)
 
 const elColor = computed(() => elementColor(character.value?.element))
 
@@ -95,13 +94,37 @@ function toggleCollect() {
 function go(id) {
   if (id) router.push(`/c/${id}`)
 }
+
+/** 单张立绘的收藏/取消（装扮卡片墙交互） */
+function isPaintingCollected(p) {
+  return album.isCollected(character.value?.id, p.file)
+}
+
+function toggleOne(p) {
+  const c = character.value
+  if (!c) return
+  if (isPaintingCollected(p)) {
+    album.uncollect(c.id, p.file)
+    toast.push('已从相册移除')
+  } else {
+    album.collect({ characterId: c.id, characterName: c.name, painting: p })
+    toast.ok('已收藏到相册')
+  }
+}
+
+function avatarOf(c) {
+  return assetUrl(c.images?.avatar || c.images?.avatar_hd || '')
+}
 </script>
 
 <template>
   <div v-if="character" class="detail">
     <div
       class="aura"
-      :style="{ background: `radial-gradient(60% 55% at 42% 45%, ${elColor}33, transparent 70%)` }"
+      :style="{
+        background: `radial-gradient(60% 55% at 42% 42%, ${elColor}30, transparent 68%),
+          linear-gradient(168deg, ${elColor}22 0%, transparent 42%, ${elColor}16 100%)`,
+      }"
       aria-hidden="true"
     />
 
@@ -109,14 +132,26 @@ function go(id) {
       <button type="button" class="back" aria-label="返回角色库" @click="router.push('/')">←</button>
       <ElementBadge :element="character.element" size="sm" />
       <span class="crumb">{{ character.nation }} / {{ character.name }}</span>
-      <div class="navs">
-        <button type="button" :disabled="!prev" @click="go(prev?.id)">‹ {{ prev?.name || '' }}</button>
-        <button type="button" :disabled="!next" @click="go(next?.id)">{{ next?.name || '' }} ›</button>
-      </div>
     </header>
 
     <div class="body">
-      <!-- 左侧竖向菜单 -->
+      <!-- 左侧角色头像切换栏（对齐游戏内角色页） -->
+      <nav ref="railRef" class="rail" aria-label="角色切换">
+        <button
+          v-for="c in store.all"
+          :key="c.id"
+          type="button"
+          class="rail-item"
+          :class="{ on: String(c.id) === String(character.id) }"
+          :title="c.name"
+          @click="go(c.id)"
+        >
+          <img v-if="avatarOf(c)" :src="avatarOf(c)" :alt="c.name" loading="lazy" />
+          <span v-else class="rail-fallback">{{ (c.name || '?').slice(0, 1) }}</span>
+        </button>
+      </nav>
+
+      <!-- 分区菜单 -->
       <nav class="tabs" aria-label="角色分区">
         <button type="button" :class="{ on: tab === 'stats' }" @click="tab = 'stats'">属性</button>
         <button type="button" :class="{ on: tab === 'story' }" @click="tab = 'story'">背景故事</button>
@@ -193,13 +228,44 @@ function go(id) {
         </template>
 
         <template v-else>
-          <div v-if="albumItems.length" class="album-list">
-            <div v-for="it in albumItems" :key="it.aid" class="album-item">
-              <span>{{ it.title || it.label || '立绘' }}</span>
-              <span class="album-kind">{{ it.kind === 'official' ? '收藏' : it.kind }}</span>
-            </div>
+          <!-- 装扮卡片墙：已收藏 = 解锁态，未收藏 = 锁定态 -->
+          <div v-if="paintings.length" class="wall">
+            <button
+              v-for="(p, i) in paintings"
+              :key="p.file"
+              type="button"
+              class="wcard"
+              :class="{ locked: !isPaintingCollected(p) }"
+              :title="isPaintingCollected(p) ? '点击取消收藏' : '点击收藏'"
+              @click="toggleOne(p)"
+            >
+              <img :src="assetUrl(p.file)" :alt="p.label || `立绘 ${i + 1}`" loading="lazy" />
+              <span class="wtag" :class="{ got: isPaintingCollected(p) }">
+                {{ isPaintingCollected(p) ? '已收藏' : '未收藏' }}
+              </span>
+              <svg v-if="!isPaintingCollected(p)" class="wlock" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M8 10V7a4 4 0 0 1 8 0v3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+                <rect x="5.5" y="10" width="13" height="9" rx="2" fill="currentColor" />
+              </svg>
+              <span class="wname">{{ p.label || `立绘 ${i + 1}` }}</span>
+            </button>
           </div>
-          <p v-else class="empty-story">还没有收藏这个角色的立绘。</p>
+          <p v-else class="empty-story">该角色没有可收藏的立绘。</p>
+
+          <template v-if="albumItems.length">
+            <p class="wall-sub">该角色的相册内容（{{ albumItems.length }}）</p>
+            <div class="album-list">
+              <div v-for="it in albumItems" :key="it.aid" class="album-item">
+                <span>{{ it.title || it.label || '立绘' }}</span>
+                <span class="album-kind">{{ it.kind === 'official' ? '收藏' : it.kind === 'card' ? '成品' : '上传' }}</span>
+              </div>
+            </div>
+          </template>
         </template>
 
         <div class="actions">
@@ -267,41 +333,68 @@ function go(id) {
   letter-spacing: 0.04em;
 }
 
-.navs {
-  margin-left: auto;
+/* 左侧角色头像切换栏 */
+.rail {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 9px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  padding: 16px 2px;
+  scrollbar-width: none;
 }
 
-.navs button {
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--gs-line);
-  font-size: 12px;
-  color: var(--gs-ink-3);
-  max-width: 140px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rail-item {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(237, 230, 214, 0.14);
+  opacity: 0.55;
   transition: all 0.18s var(--gs-ease);
 }
 
-.navs button:hover:not(:disabled) {
-  color: var(--gs-gold-hi);
-  border-color: var(--gs-line-hi);
+.rail-item img,
+.rail-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #efe9df;
 }
 
-.navs button:disabled {
-  opacity: 0.35;
-  cursor: default;
+.rail-fallback {
+  display: grid;
+  place-items: center;
+  font-family: var(--gs-font-display);
+  font-size: 16px;
+  color: #8a7c66;
+  box-sizing: border-box;
+}
+
+.rail-item:hover {
+  opacity: 0.9;
+  border-color: rgba(237, 230, 214, 0.4);
+}
+
+.rail-item.on {
+  opacity: 1;
+  border-color: #f5f2ea;
+  box-shadow: 0 0 0 2px rgba(211, 188, 142, 0.55), 0 0 16px rgba(211, 188, 142, 0.35);
 }
 
 .body {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr) 380px;
-  gap: 24px;
+  grid-template-columns: 46px 104px minmax(0, 1fr) 380px;
+  gap: 22px;
   padding-top: 18px;
   align-items: start;
 }
@@ -483,6 +576,16 @@ function go(id) {
   font-size: 12px;
   color: var(--gs-ink-3);
   letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stats dt::before {
+  content: '◇';
+  font-size: 8px;
+  color: var(--gs-gold-deep);
+  opacity: 0.8;
 }
 
 .stats dd {
@@ -570,6 +673,89 @@ function go(id) {
   font-size: 11px;
 }
 
+/* 装扮卡片墙：解锁 / 锁定 */
+.wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.wcard {
+  position: relative;
+  padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--gs-line-hi);
+  cursor: pointer;
+  transition: all 0.18s var(--gs-ease);
+}
+
+.wcard img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: top;
+  background: #0d2233;
+}
+
+.wcard:hover {
+  border-color: var(--gs-gold);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.wcard.locked img {
+  filter: grayscale(0.9) brightness(0.55);
+}
+
+.wtag {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: linear-gradient(180deg, var(--gs-gold-hi), var(--gs-gold));
+  color: #1a1208;
+  font-weight: 600;
+}
+
+.wtag.got {
+  background: rgba(6, 18, 28, 0.82);
+  color: var(--gs-gold-hi);
+  border: 1px solid var(--gs-line-hi);
+}
+
+.wlock {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 14px;
+  height: 14px;
+  color: rgba(237, 230, 214, 0.75);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+
+.wname {
+  display: block;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--gs-ink-2);
+  background: rgba(9, 22, 33, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.wall-sub {
+  margin-top: 18px;
+  font-size: 11px;
+  color: var(--gs-gold-deep);
+  letter-spacing: 0.16em;
+  margin-bottom: 8px;
+}
+
 .actions {
   display: flex;
   gap: 10px;
@@ -592,11 +778,15 @@ function go(id) {
 
 @media (max-width: 1200px) {
   .body {
-    grid-template-columns: 84px minmax(0, 1fr) 320px;
-    gap: 16px;
+    grid-template-columns: 40px 84px minmax(0, 1fr) 320px;
+    gap: 14px;
   }
   .side h1 {
     font-size: 24px;
+  }
+  .rail-item {
+    width: 32px;
+    height: 32px;
   }
 }
 
@@ -606,6 +796,18 @@ function go(id) {
   }
   .body {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .rail {
+    flex-direction: row;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 0;
+  }
+  .rail-item {
+    width: 36px;
+    height: 36px;
   }
   .tabs {
     flex-direction: row;
@@ -621,9 +823,6 @@ function go(id) {
   .poster,
   .poster img {
     max-height: 58vh;
-  }
-  .navs {
-    display: none;
   }
 }
 </style>
