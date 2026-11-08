@@ -17,8 +17,8 @@ const pickMonth = async (page, m) => {
 }
 const geometry = (page) =>
   page.evaluate(() => {
-    const grid = document.querySelector('.cal-grid')
-    const cells = [...document.querySelectorAll('.cell')]
+    const grid = document.querySelector('.cal-slide[aria-hidden="false"] .cal-grid')
+    const cells = [...document.querySelectorAll('.cal-slide[aria-hidden="false"] .cell')]
     const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length
     const first = cells[0].getBoundingClientRect()
     const seventh = cells[6].getBoundingClientRect()
@@ -48,7 +48,7 @@ try {
   check('第 1–7 格同在第一行（1 号起于首列）', Math.abs(g11.firstTop - g11.seventhTop) <= 1)
   check('第 8 格换行', g11.eighthTop > g11.seventhTop + 10)
   const weekdayText = await page.evaluate(() => {
-    const panel = document.querySelector('.cal-grid')?.parentElement
+    const panel = document.querySelector('.cal-slide[aria-hidden="false"] .cal-grid')?.parentElement
     const t = panel ? panel.innerText : ''
     return ['周一', '周二', '周一', '一', '二', '三', '四', '五', '六', '日'].filter((w) => t.includes(w))
   })
@@ -62,7 +62,7 @@ try {
 
   console.log('4) 头像不遮挡日期数字')
   const overlap = await page.evaluate(() => {
-    const cells = [...document.querySelectorAll('.cell')].filter((c) => c.querySelector('.face'))
+    const cells = [...document.querySelectorAll('.cal-slide[aria-hidden="false"] .cell')].filter((c) => c.querySelector('.face'))
     return cells.slice(0, 6).map((c) => {
       const n = c.querySelector('.dnum').getBoundingClientRect()
       const f = c.querySelector('.face').getBoundingClientRect()
@@ -73,11 +73,11 @@ try {
 
   console.log('5) 点击生日格跳转角色详情')
   const target = await page.evaluate(() => {
-    const cell = [...document.querySelectorAll('.cell')].find((c) => c.querySelector('.face'))
+    const cell = [...document.querySelectorAll('.cal-slide[aria-hidden="false"] .cell')].find((c) => c.querySelector('.face'))
     return { day: cell.querySelector('.dnum').textContent.trim(), name: cell.querySelector('.face').alt }
   })
   await page.evaluate(() => {
-    const cell = [...document.querySelectorAll('.cell')].find((c) => c.querySelector('.face'))
+    const cell = [...document.querySelectorAll('.cal-slide[aria-hidden="false"] .cell')].find((c) => c.querySelector('.face'))
     cell.click()
   })
   await sleep(900)

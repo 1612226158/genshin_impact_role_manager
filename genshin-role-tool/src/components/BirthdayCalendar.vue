@@ -81,13 +81,17 @@ function onKey(e, cell) {
   /* 固定 7 列：不出现星期标签，仅作为日历骨架 */
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
-  /* 限制整体宽度，避免宽屏下格子过大、头像喧宾夺主 */
+  /* 限制整体宽度并居中，避免宽屏下左右边距不对称 */
   max-width: 780px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .cell {
   position: relative;
-  aspect-ratio: 1.1;
+  aspect-ratio: 1;
+  /* 兜底：任何情况下头像都不会溢出格子 */
+  overflow: hidden;
   border-radius: 8px;
   border: 1px solid var(--gs-line);
   background: rgba(255, 255, 255, 0.014);
@@ -115,11 +119,12 @@ function onKey(e, cell) {
 
 .dnum {
   position: absolute;
-  top: 5px;
+  top: 4px;
   left: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.15;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
   color: var(--gs-ink-3);
   z-index: 2;
 }
@@ -128,14 +133,14 @@ function onKey(e, cell) {
   color: var(--gs-gold-hi);
 }
 
-/* 头像固定在格子下半部，日期数字在左上角，两者不重叠 */
+/* 头像居中偏下但留出数字区域，且整体留在格子内 */
 .who {
   position: absolute;
   left: 50%;
-  bottom: 6px;
+  bottom: 12%;
   transform: translateX(-50%);
-  width: min(58%, 58px);
-  height: min(56%, 58px);
+  width: min(52%, 52px);
+  height: min(52%, 52px);
   display: grid;
   place-items: center;
   z-index: 1;

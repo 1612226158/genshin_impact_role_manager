@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import BirthdayCardCanvas from '@/components/BirthdayCardCanvas.vue'
@@ -72,20 +72,79 @@ const monthGroups = computed(() => {
 
 const monthCount = computed(() => monthGroups.value.reduce((s, g) => s + g.list.length, 0))
 
-/* 日历视图：按日聚合当月生日，点击直接进入角色详情 */
-const calendarDays = computed(() => daysInMonth(browseMonth.value))
-const byDay = computed(() => {
-  const map = {}
-  for (const c of withBirthday.value) {
-    if (c.birthdayMonth !== browseMonth.value) continue
-    ;(map[c.birthdayDay] || (map[c.birthdayDay] = [])).push(c)
-  }
-  return map
-})
-
 function goCharacter(c) {
   if (c?.id) router.push(`/c/${c.id}`)
 }
+
+/* ---------- 月历轮播：位移轨道 + CSS 过渡，一次手势切一个月 ---------- */
+const viewportRef = ref(null)
+const slideW = ref(0)
+let wheelLock = 0
+let ro = null
+
+function byDayFor(m) {
+  const map = {}
+  for (const c of withBirthday.value) {
+    if (c.birthdayMonth !== m) continue
+    ;(map[c.birthdayDay] || (map[c.birthdayDay] = [])).push(c)
+  }
+  return map
+}
+
+const calendarMonths = computed(() =>
+  MONTHS.map((m) => ({ m, days: daysInMonth(m), byDay: byDayFor(m) }))
+)
+
+const monthCounts = computed(() => {
+  const o = {}
+  for (const m of MONTHS) o[m] = withBirthday.value.filter((c) => c.birthdayMonth === m).length
+  return o
+})
+
+const trackStyle = computed(() => ({
+  transform: `translateX(${-(browseMonth.value - 1) * slideW.value}px)`,
+}))
+
+function goMonth(m) {
+  browseMonth.value = Math.min(12, Math.max(1, m))
+}
+
+/** 横向滚轮：锁定期内只响应一次，保证「滑一次切一个月」 */
+function onWheel(e) {
+  const horizontal = Math.abs(e.deltaX) >= Math.abs(e.deltaY)
+  const delta = horizontal ? e.deltaX : e.shiftKey ? e.deltaY : 0
+  if (!delta) return
+  e.preventDefault()
+  const now = performance.now()
+  if (now < wheelLock) return
+  wheelLock = now + 460
+  goMonth(browseMonth.value + (delta > 0 ? 1 : -1))
+}
+
+function onTrackKey(e) {
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    goMonth(browseMonth.value - 1)
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    goMonth(browseMonth.value + 1)
+  }
+}
+
+onMounted(() => {
+  const el = viewportRef.value
+  if (!el) return
+  slideW.value = el.clientWidth
+  ro = new ResizeObserver(() => {
+    slideW.value = el.clientWidth
+  })
+  ro.observe(el)
+})
+
+onBeforeUnmount(() => {
+  ro?.disconnect()
+  ro = null
+})
 
 const noBirthday = computed(() => store.all.filter((c) => !c.birthdayMonth || !c.birthdayDay))
 
@@ -270,21 +329,36 @@ function avatarOf(c) {
               type="button"
               class="mtab"
               :class="{ on: browseMonth === m }"
-              @click="browseMonth = m"
+              @click="goMonth(m)"
             >
               {{ m }}月
-              <em>{{ withBirthday.filter((c) => c.birthdayMonth === m).length }}</em>
+              <em>{{ monthCounts[m] }}</em>
             </button>
           </div>
 
-          <!-- 按月浏览：日历网格（7 列骨架，无星期，2 月固定 29 天） -->
-          <BirthdayCalendar
-            :month="browseMonth"
-            :days="calendarDays"
-            :by-day="byDay"
-            :today="{ month: todayM, day: todayD }"
-            @pick="goCharacter"
-          />
+          <!-- 月历轮播：横向滑动区域，一次手势切换一个月 -->
+          <div
+            ref="viewportRef"
+            class="cal-carousel"
+            role="group"
+            aria-roledescription="轮播"
+            aria-label="按月浏览日历：横向滚动或方向键切换月份"
+            tabindex="0"
+            @wheel="onWheel"
+            @keydown="onTrackKey"
+          >
+            <div class="cal-track" :style="trackStyle">
+              <div v-for="mo in calendarMonths" :key="mo.m" class="cal-slide" :aria-hidden="browseMonth !== mo.m">
+                <BirthdayCalendar
+                  :month="mo.m"
+                  :days="mo.days"
+                  :by-day="mo.byDay"
+                  :today="{ month: todayM, day: todayD }"
+                  @pick="goCharacter"
+                />
+              </div>
+            </div>
+          </div>
           <p v-if="!monthCount" class="none">这个月没有收录到生日。</p>
         </section>
 
@@ -540,8 +614,39 @@ function avatarOf(c) {
 .mtabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 14px;
+  /* 收缩到内容宽再整体居中：首尾留白（padding）与两两间距（gap）同为 8px */
+  width: fit-content;
+  margin: 0 auto 14px;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+/* 月历轮播：视口裁剪 + 轨道位移过渡（一次手势切一个月） */
+.cal-carousel {
+  position: relative;
+  overflow: hidden;
+  outline: none;
+}
+
+.cal-carousel:focus-visible {
+  box-shadow: 0 0 0 2px var(--gs-gold);
+  border-radius: 10px;
+}
+
+.cal-track {
+  display: flex;
+  will-change: transform;
+  transition: transform 0.42s cubic-bezier(0.22, 0.8, 0.25, 1);
+}
+
+:global(html.no-motion) .cal-track {
+  transition: none;
+}
+
+.cal-slide {
+  flex: 0 0 100%;
+  min-width: 0;
 }
 
 .mtab {
