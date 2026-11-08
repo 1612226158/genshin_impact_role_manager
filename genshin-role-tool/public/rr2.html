@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head><meta charset="UTF-8" /><title>诊断 · vue-router 式 replaceState</title></head>
+  <body style="background:#0b1b28;color:#d3bc8e;font:15px system-ui;padding:40px">
+    <p>本页精确复刻 vue-router 初始导航的调用：带状态对象的 replaceState，URL 不变。</p>
+    <p id="st">done</p>
+    <script>
+      try {
+        const state = {
+          back: null,
+          current: location.pathname || '/',
+          forward: null,
+          position: 0,
+          replaced: true,
+          scroll: null,
+        }
+        history.replaceState(state, '', location.pathname + location.search)
+        document.getElementById('st').textContent =
+          'replaceState(state, "", ' + location.pathname + location.search + ') 已执行'
+      } catch (e) {
+        document.getElementById('st').textContent = '抛错: ' + e.message
+      }
+    </script>
+  </body>
+</html>
