@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ElementBadge from '@/components/ElementBadge.vue'
 import { useCharacterStore } from '@/stores/character'
@@ -34,12 +34,42 @@ watch(
   }
 )
 
-/** 把头像栏滚动到当前角色（居中）。手动设 scrollTop，避免 scrollIntoView 连带滚动整页 */
+/** 把头像栏滚动到当前角色（居中），带 easeOutCubic 缓动动画 */
 function scrollRailToActive() {
   const rail = railRef.value
   const item = rail?.querySelector('.rail-item.on')
   if (!rail || !item) return
-  rail.scrollTop = item.offsetTop - rail.clientHeight / 2 + item.clientHeight / 2
+  const target = item.offsetTop - rail.clientHeight / 2 + item.clientHeight / 2
+  animateRailScroll(rail, target)
+}
+
+let railAnim = null
+
+function animateRailScroll(rail, target) {
+  const start = rail.scrollTop
+  const delta = target - start
+  // 距离太近 / 用户关闭动画：直接落位
+  if (Math.abs(delta) < 2 || document.documentElement.classList.contains('no-motion')) {
+    rail.scrollTop = target
+    return
+  }
+  if (railAnim) cancelAnimationFrame(railAnim)
+  const duration = 380
+  const t0 = performance.now()
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3)
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / duration)
+    rail.scrollTop = start + delta * easeOutCubic(p)
+    railAnim = p < 1 ? requestAnimationFrame(step) : null
+  }
+  railAnim = requestAnimationFrame(step)
+}
+
+function stopRailAnim() {
+  if (railAnim) {
+    cancelAnimationFrame(railAnim)
+    railAnim = null
+  }
 }
 
 onMounted(async () => {
@@ -47,6 +77,15 @@ onMounted(async () => {
   await nextTick()
   await sleepSmall()
   scrollRailToActive()
+  // 用户手动滚动头像栏时，立即让位于手动操作
+  railRef.value?.addEventListener('wheel', stopRailAnim, { passive: true })
+  railRef.value?.addEventListener('pointerdown', stopRailAnim)
+})
+
+onBeforeUnmount(() => {
+  stopRailAnim()
+  railRef.value?.removeEventListener('wheel', stopRailAnim)
+  railRef.value?.removeEventListener('pointerdown', stopRailAnim)
 })
 
 function sleepSmall() {

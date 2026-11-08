@@ -40,6 +40,9 @@ try {
     const items = [...document.querySelectorAll('.rail-item')]
     items[100].click()
   })
+  // 采样动画中间态：点击后 ~120ms 应处于滚动途中（缓动而非瞬切）
+  await sleep(120)
+  const mid = await page.evaluate(() => document.querySelector('.rail')?.scrollTop)
   await sleep(900)
   const s2 = await page.evaluate(() => {
     const rail = document.querySelector('.rail')
@@ -49,6 +52,7 @@ try {
       crumb: crumb.trim(),
       name: item?.title,
       pathname: location.pathname,
+      finalTop: rail?.scrollTop,
       visible: (() => {
         if (!rail || !item) return false
         const ir = item.getBoundingClientRect()
@@ -57,11 +61,15 @@ try {
       })(),
     }
   })
-  console.log('   ', JSON.stringify(s2))
+  console.log('   ', JSON.stringify({ mid, ...s2 }))
   check('路由切到新角色', s2.pathname.startsWith('/c/') && s2.pathname !== '/c/1055')
   check('面包屑显示新角色', s2.crumb.length > 3 && s2.crumb.includes('/'))
   check('头像栏高亮切到新角色', s2.name && s2.name !== '砂糖')
   check('新选中头像在可视区内', s2.visible)
+  check(
+    `滚动为缓动动画（中间态 scrollTop=${mid} 位于 0 与终值 ${s2.finalTop} 之间）`,
+    typeof mid === 'number' && mid > 5 && s2.finalTop > mid + 5
+  )
 
   console.log(failed ? `\n结果：${failed} 项失败` : '\n全部通过')
   await browser.close()
