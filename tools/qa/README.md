@@ -25,6 +25,7 @@ npm install
 | `node shoot.mjs <config.json> [宽] [高]` | 批量截图。config：`[{ name, path, wait?, script? }]`，`script` 为页内 JS（点击页签等） |
 | `node e2e.mjs` | 端到端回归：编辑/记录/撤销/新建/持久化/生日闰年边界/相册收藏，共 14 项断言 |
 | `node motion.mjs` | 动画体系断言（6 项）：模拟系统关闭动画后过渡仍生效、页签滑动、应用内动画开关 |
+| `node pinned-head.mjs` | 断言详情页头部（名称/称号/星级/按钮）在正文滚动时保持钉住 |
 | `node export-canvas.mjs card\|collage` | 导出生日卡 / 2×2 拼图的**真实成品 PNG** |
 | `node frames.mjs <视频> [间隔秒] [输出目录]` | 视频抽帧（pipe 模式） |
 | `node contact-sheet.mjs <帧目录> [输出]` | 抽帧拼成带时间戳的总览图 |

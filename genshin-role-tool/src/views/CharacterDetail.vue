@@ -465,8 +465,18 @@ function avatarOf(c) {
 .body.wide .side {
   min-width: 0;
   max-height: calc(100vh - 200px);
+  /* 面板本身不滚动：头部（名称/称号/星级/按钮）固定，只有下方 tab-body 内容滚动 */
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px 16px 4px;
+}
+
+.body.wide .tab-body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 8px 16px 20px 4px;
+  padding-right: 10px;
+  margin-top: 4px;
 }
 
 .tabs {
