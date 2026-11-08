@@ -34,6 +34,12 @@ watch(
   }
 )
 
+// 切换页签回到页首，并重置文字面板的内部滚动
+watch(tab, () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+  nextTick(() => document.querySelector('.side')?.scrollTo({ top: 0 }))
+})
+
 const paintingSrc = computed(() => assetUrl(paintings.value[activePainting.value]?.file || ''))
 
 const elColor = computed(() => elementColor(character.value?.element))
@@ -140,7 +146,7 @@ function avatarOf(c) {
       <span class="crumb">{{ character.nation }} / {{ character.name }}</span>
     </header>
 
-    <div class="body">
+    <div class="body" :class="{ wide: tab !== 'stats' }">
       <!-- 左侧角色头像切换栏（对齐游戏内角色页） -->
       <nav ref="railRef" class="rail" aria-label="角色切换">
         <button
@@ -201,6 +207,15 @@ function avatarOf(c) {
         </p>
 
         <div class="rule"></div>
+
+        <div class="actions">
+          <button type="button" class="gs-btn" :class="{ primary: !collected }" @click="toggleCollect">
+            {{ collected ? '已加入相册 ✓' : '加入相册' }}
+          </button>
+          <button type="button" class="gs-btn" @click="router.push(`/c/${character.id}/edit`)">
+            编辑
+          </button>
+        </div>
 
         <template v-if="tab === 'stats'">
           <dl class="stats">
@@ -273,15 +288,6 @@ function avatarOf(c) {
             </div>
           </template>
         </template>
-
-        <div class="actions">
-          <button type="button" class="gs-btn" :class="{ primary: !collected }" @click="toggleCollect">
-            {{ collected ? '已加入相册 ✓' : '加入相册' }}
-          </button>
-          <button type="button" class="gs-btn" @click="router.push(`/c/${character.id}/edit`)">
-            编辑
-          </button>
-        </div>
       </aside>
     </div>
   </div>
@@ -410,6 +416,21 @@ function avatarOf(c) {
   gap: 22px;
   padding-top: 18px;
   align-items: start;
+}
+
+/* 故事 / 相册页签：立绘保留在左（收窄），右侧换宽版文字面板（内部滚动） */
+.body.wide {
+  grid-template-columns: 46px 104px minmax(260px, 360px) minmax(460px, 1fr);
+}
+
+.body.wide .side {
+  min-width: 0;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  padding: 8px 16px 20px 4px;
+  /* 立绘列与文字面板之间的一条金色分隔 */
+  border-left: 1px solid var(--gs-line);
+  padding-left: 22px;
 }
 
 .tabs {
@@ -641,23 +662,36 @@ function avatarOf(c) {
 }
 
 .story section {
-  margin-bottom: 18px;
+  margin-bottom: 22px;
 }
 
 .story h3 {
-  font-size: 13.5px;
+  font-size: 15px;
   color: var(--gs-gold);
   letter-spacing: 0.1em;
-  padding-left: 10px;
+  padding-left: 12px;
   border-left: 2px solid var(--gs-gold-deep);
-  margin-bottom: 8px;
+  margin: 26px 0 12px;
+}
+
+.story h3:first-child {
+  margin-top: 0;
 }
 
 .story p {
-  font-size: 13.5px;
-  line-height: 1.95;
-  color: var(--gs-ink-2);
+  font-size: 15px;
+  line-height: 2.05;
+  color: var(--gs-ink);
   white-space: pre-wrap;
+}
+
+/* 长文阅读版心 */
+.story {
+  max-width: 700px;
+}
+
+.story section + section {
+  padding-top: 4px;
 }
 
 .empty-story {
@@ -691,6 +725,11 @@ function avatarOf(c) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 10px;
+}
+
+.body.wide .wall {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
 }
 
 .wcard {
@@ -772,7 +811,16 @@ function avatarOf(c) {
 .actions {
   display: flex;
   gap: 10px;
-  margin-top: 22px;
+  margin: 0 0 18px;
+}
+
+.body.wide .actions {
+  margin-bottom: 22px;
+}
+
+.body.wide .actions .gs-btn {
+  flex: 0 0 auto;
+  min-width: 140px;
 }
 
 .actions .gs-btn {
@@ -794,6 +842,9 @@ function avatarOf(c) {
     grid-template-columns: 40px 84px minmax(0, 1fr) 320px;
     gap: 14px;
   }
+  .body.wide {
+    grid-template-columns: 40px 84px minmax(200px, 300px) minmax(380px, 1fr);
+  }
   .side h1 {
     font-size: 24px;
   }
@@ -807,9 +858,16 @@ function avatarOf(c) {
   .detail {
     padding: 12px 14px 50px;
   }
-  .body {
+  .body,
+  .body.wide {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+  .body.wide .side {
+    max-height: none;
+    overflow: visible;
+    border-left: none;
+    padding-left: 0;
   }
   .rail {
     flex-direction: row;
