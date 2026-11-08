@@ -34,7 +34,30 @@ npm install
 | `net-monitor.mjs [静置秒] [路径]` | 页面静置期间的请求监视（检测注入脚本心跳、favicon 循环等） |
 | `diag-flags.mjs` | 断言诊断开关（?flat=1 / ?nostar=1）在 computed style 层面生效 |
 | `dev-nohmr.mjs` | 以禁用 HMR WebSocket 的模式启动 dev server（配合 vite.config 的 NO_HMR 环境变量） |
-| `bare.html`（public/ 下） | 零脚本静态诊断页，用于二分「dev server 本身 vs 应用页面」 |
+| `bare.html`（public/diag/ 下） | 零脚本静态诊断页，用于二分「dev server 本身 vs 应用页面」 |
+
+## 已定案：Edge 157 窗口管理故障（与本项目代码无关）
+
+2026-11-08 八轮二分实验的最终结论：
+
+| 实验 | Edge 结果 | Chrome 结果 |
+|---|---|---|
+| bare.html（零 JS） | 正常 | — |
+| Kaspersky 关闭 | 心跳消失但仍复现 | — |
+| ?flat&nostar（关滤镜/canvas） | 异常 | — |
+| ?noapp（隐藏界面） | 异常 | — |
+| ?nojs（不挂载应用） | 正常 | — |
+| minimal（最小 Vue） | 正常 | — |
+| minimal + vue-router | **异常** | — |
+| minimal + memory router（零 history 交互） | **异常** | — |
+| 完整应用（Chrome） | — | **正常** |
+
+结论：**Edge 157 + Windows 动画关闭** 环境下，页面挂载 vue-router（或 pinia+router 组合）即触发
+「最小化被强制还原」与幽灵 about:blank 窗口；History API 单一行为（replaceState/popstate）
+均不能复现，触发点在框架安装路径的更深处。Chrome 完全正常。
+
+处理：本项目日常使用建议用 Chrome 打开；长期方案是更新 Edge 或向 Edge 反馈（复现链保留在
+public/diag/ 下：bare → minimal → withrouter → memhist）。
 
 ## 已知坑（勿重蹈）
 
