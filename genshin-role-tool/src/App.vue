@@ -6,10 +6,13 @@ import { useSettingsStore } from '@/stores/settings'
 
 // 应用根部激活动画开关监听：无论当前在哪个路由，<html>.no-motion 都随设置即时生效
 useSettingsStore()
+
+// 诊断开关：?nostarapp=1 不渲染星空组件（隔离 ResizeObserver + fixed canvas）
+const noStarApp = new URLSearchParams(location.search).has('nostarapp')
 </script>
 
 <template>
-  <Starfield />
+  <Starfield v-if="!noStarApp" />
   <TopBar />
   <main>
     <RouterView v-slot="{ Component }">
