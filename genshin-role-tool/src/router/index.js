@@ -9,8 +9,7 @@ import { createRouter, createWebHistory } from 'vue-router'
  * createWebHistory 走标准 popstate，全互联网 SPA 通用，不受影响。
  * 服务端兼容性：vite dev / vite preview 均自带 SPA fallback，无额外配置。
  */
-const routes = [
-  {
+const routes = [  {
     path: '/',
     name: 'library',
     component: () => import('@/views/CharacterLibrary.vue'),
@@ -68,5 +67,7 @@ router.afterEach((to) => {
   const suffix = to.meta?.title ? ` · ${to.meta.title}` : ''
   document.title = `原神角色工具${suffix}`
 })
+
+export { routes }
 
 export default router

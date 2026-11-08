@@ -36,9 +36,16 @@ if (diag.has('nojs')) {
   })
   if (diag.has('withrouter')) {
     const { createPinia } = await import('pinia')
-    const { default: router } = await import('./router')
+    if (diag.has('memhist')) {
+      // 诊断：内存路由——完全不触碰 window.history、不注册任何监听
+      const { createRouter, createMemoryHistory } = await import('vue-router')
+      const { routes } = await import('./router')
+      app.use(createRouter({ history: createMemoryHistory(), routes }))
+    } else {
+      const { default: router } = await import('./router')
+      app.use(router)
+    }
     app.use(createPinia())
-    app.use(router)
   }
   app.mount('#app')
 } else {

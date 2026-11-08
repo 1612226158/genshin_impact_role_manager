@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head><meta charset="UTF-8" /><title>诊断 · popstate + replaceState 组合</title></head>
+  <body style="background:#0b1b28;color:#d3bc8e;font:15px system-ui;padding:40px">
+    <p>本页组合 vue-router 的两个行为：注册 popstate 监听 + 调用 replaceState（带状态对象）。</p>
+    <p id="st">done</p>
+    <script>
+      window.addEventListener('popstate', () => {
+        document.getElementById('st').textContent = 'popstate fired'
+      })
+      try {
+        const state = {
+          back: null,
+          current: location.pathname || '/',
+          forward: null,
+          position: 0,
+          replaced: true,
+          scroll: null,
+        }
+        history.replaceState(state, '', location.pathname + location.search)
+        document.getElementById('st').textContent =
+          'popstate 监听 + replaceState 均已执行 (' + location.pathname + location.search + ')'
+      } catch (e) {
+        document.getElementById('st').textContent = '抛错: ' + e.message
+      }
+    </script>
+  </body>
+</html>
