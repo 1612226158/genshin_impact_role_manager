@@ -150,17 +150,27 @@ try {
   check('纵向滚轮切换到下一月', Math.abs(postY.x - (preY.x - preY.w)) <= 4, `${postY.x} vs ${preY.x - preY.w}`)
   check('页面未被滚动（滚轮事件被拦截）', Math.abs(sy1 - sy0) <= 1, `${sy0} → ${sy1}`)
 
-  console.log('4c) 边界交还页面滚动')
+  console.log('4c) 首尾循环：12 月下滚进 1 月，1 月上滚回 12 月')
   await clickMonth(12)
   const sy2 = await page.evaluate(() => window.scrollY)
   await page.mouse.move(box.x, box.y)
   await page.mouse.wheel({ deltaY: 200 })
-  await sleep(600)
+  await sleep(900)
+  const wrapNext = await state()
   const sy3 = await page.evaluate(() => window.scrollY)
-  const still12 = await state()
-  console.log(`  12月再下滚：scrollY ${sy2} → ${sy3}，月份 ${still12.month}`)
-  check('12 月处滚轮交还页面（页面滚动）', sy3 > sy2 + 20, `${sy2} → ${sy3}`)
-  check('月份停在 12 月', still12.month?.startsWith('12月'), still12.month)
+  console.log(`  12月下滚 → ${wrapNext.month}，x=${wrapNext.x}，scrollY ${sy2}→${sy3}`)
+  check('12 月下滚后切到 1 月', wrapNext.month?.startsWith('1月'), wrapNext.month)
+  check('归位后轨道对齐 1 月（x = -1 屏）', Math.abs(wrapNext.x + wrapNext.w) <= 4, `${wrapNext.x} vs ${-wrapNext.w}`)
+  check('循环过程中页面未被滚动', Math.abs(sy3 - sy2) <= 1, `${sy2} → ${sy3}`)
+
+  await clickMonth(1)
+  await page.mouse.move(box.x, box.y)
+  await page.mouse.wheel({ deltaY: -200 })
+  await sleep(900)
+  const wrapPrev = await state()
+  console.log(`  1月上滚 → ${wrapPrev.month}，x=${wrapPrev.x}`)
+  check('1 月上滚后切到 12 月', wrapPrev.month?.startsWith('12月'), wrapPrev.month)
+  check('归位后轨道对齐 12 月（x = -12 屏）', Math.abs(wrapPrev.x + wrapPrev.w * 12) <= 4, `${wrapPrev.x} vs ${-wrapPrev.w * 12}`)
 
   console.log('5) 页签点击与轮播同步')
   await page.evaluate(() => {
@@ -169,9 +179,10 @@ try {
   })
   await sleep(800)
   const after7 = await state()
-  const expect7 = -s0.w * 6
+  // 循环轨道序列为 12,1..12,1：月份 m 落在下标 m
+  const expect7 = -s0.w * 7
   console.log('   ', JSON.stringify({ ...after7, expect: expect7 }))
-  check('点击 7 月后轨道定位到第 7 屏', Math.abs(after7.x - expect7) <= 4, `${after7.x} vs ${expect7}`)
+  check('点击 7 月后轨道定位到 7 月', Math.abs(after7.x - expect7) <= 4, `${after7.x} vs ${expect7}`)
   check('7 月页签高亮', after7.month?.startsWith('7月'), after7.month)
 
   console.log('6) 无整页横向溢出')

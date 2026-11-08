@@ -76,8 +76,9 @@ function goCharacter(c) {
   if (c?.id) router.push(`/c/${c.id}`)
 }
 
-/* ---------- 月历轮播：位移轨道 + CSS 过渡，一次手势切一个月 ---------- */
+/* ---------- 月历轮播：循环轨道（首尾克隆）+ CSS 过渡，一次手势切一个月 ---------- */
 const viewportRef = ref(null)
+const trackRef = ref(null)
 const slideW = ref(0)
 let wheelLock = 0
 let ro = null
@@ -91,9 +92,19 @@ function byDayFor(m) {
   return map
 }
 
-const calendarMonths = computed(() =>
-  MONTHS.map((m) => ({ m, days: daysInMonth(m), byDay: byDayFor(m) }))
-)
+/** 每日生日索引按月份预计算，避免每次渲染重复聚合 */
+const monthData = computed(() => {
+  const o = {}
+  for (const m of MONTHS) o[m] = { m, days: daysInMonth(m), byDay: byDayFor(m) }
+  return o
+})
+
+/**
+ * 轨道序列：12, 1, 2, …, 12, 1
+ * 下标 0 是 12 月的克隆（向前翻的落脚点），下标 13 是 1 月的克隆（向后翻的落脚点）；
+ * 落在克隆位后无动画瞬移到真实位，形成无缝循环。
+ */
+const SLIDES = [12, ...MONTHS, 1]
 
 const monthCounts = computed(() => {
   const o = {}
@@ -101,39 +112,71 @@ const monthCounts = computed(() => {
   return o
 })
 
+/** 轨道下标（0..13）；真实月份 m 对应下标 m */
+const posIndex = ref(browseMonth.value)
+/* 瞬移时不播动画 */
+const jumping = ref(false)
+
 const trackStyle = computed(() => ({
-  transform: `translateX(${-(browseMonth.value - 1) * slideW.value}px)`,
+  transform: `translateX(${-posIndex.value * slideW.value}px)`,
 }))
 
+const slideMonth = (i) => SLIDES[i]
+
+/** 直接定位到某月（页签点击）：按下标动画滚动 */
 function goMonth(m) {
   browseMonth.value = Math.min(12, Math.max(1, m))
+  posIndex.value = browseMonth.value
 }
 
-/** 滚轮切月：横向滚轮（触控板）与普通纵向滚轮都支持；
- *  仅在确实能切到相邻月份时拦截，到 1 月/12 月边界交还页面滚动 */
+/** 静默瞬移到等价位置（不播动画） */
+function jumpTo(m, index) {
+  jumping.value = true
+  posIndex.value = index
+  browseMonth.value = m
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      jumping.value = false
+    })
+  })
+}
+
+/** 步进一格，允许落到克隆位；过渡结束后再瞬移归位 */
+function step(dir) {
+  const next = posIndex.value + dir
+  posIndex.value = next
+  browseMonth.value = SLIDES[next]
+}
+
+function onTrackTransitionEnd(e) {
+  // 只看轨道自身的 transform（子元素过渡会冒泡上来）
+  if (e.target !== trackRef.value || e.propertyName !== 'transform' || jumping.value) return
+  const i = posIndex.value
+  if (i === 0) jumpTo(12, 12)
+  else if (i === SLIDES.length - 1) jumpTo(1, 1)
+}
+
+/** 滚轮切月：横向滚轮与普通纵向滚轮都支持；循环轮播因此不再有边界 */
 function onWheel(e) {
   const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1
   const rawX = e.deltaX * unit
   const rawY = e.deltaY * unit
   const delta = Math.abs(rawX) > Math.abs(rawY) ? rawX : rawY
   if (!delta) return
-  const dir = delta > 0 ? 1 : -1
-  const next = browseMonth.value + dir
-  if (next < 1 || next > 12) return // 边界：不拦截，让页面正常滚动
   e.preventDefault()
   const now = performance.now()
   if (now < wheelLock) return
   wheelLock = now + 460
-  goMonth(next)
+  step(delta > 0 ? 1 : -1)
 }
 
 function onTrackKey(e) {
   if (e.key === 'ArrowLeft') {
     e.preventDefault()
-    goMonth(browseMonth.value - 1)
+    step(-1)
   } else if (e.key === 'ArrowRight') {
     e.preventDefault()
-    goMonth(browseMonth.value + 1)
+    step(1)
   }
 }
 
@@ -353,12 +396,23 @@ function avatarOf(c) {
             @wheel="onWheel"
             @keydown="onTrackKey"
           >
-            <div class="cal-track" :style="trackStyle">
-              <div v-for="mo in calendarMonths" :key="mo.m" class="cal-slide" :aria-hidden="browseMonth !== mo.m">
+            <div
+              ref="trackRef"
+              class="cal-track"
+              :class="{ jumping }"
+              :style="trackStyle"
+              @transitionend="onTrackTransitionEnd"
+            >
+              <div
+                v-for="(m, i) in SLIDES"
+                :key="`${i}-${m}`"
+                class="cal-slide"
+                :aria-hidden="browseMonth !== m"
+              >
                 <BirthdayCalendar
-                  :month="mo.m"
-                  :days="mo.days"
-                  :by-day="mo.byDay"
+                  :month="monthData[m].m"
+                  :days="monthData[m].days"
+                  :by-day="monthData[m].byDay"
                   :today="{ month: todayM, day: todayD }"
                   @pick="goCharacter"
                 />
@@ -644,6 +698,11 @@ function avatarOf(c) {
   display: flex;
   will-change: transform;
   transition: transform 0.42s cubic-bezier(0.22, 0.8, 0.25, 1);
+}
+
+/* 克隆位归位时禁用过渡，实现无缝循环 */
+.cal-track.jumping {
+  transition: none;
 }
 
 :global(html.no-motion) .cal-track {
