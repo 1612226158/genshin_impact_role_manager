@@ -30,6 +30,7 @@ npm install
 | `node frames.mjs <视频> [间隔秒] [输出目录]` | 视频抽帧（pipe 模式） |
 | `node contact-sheet.mjs <帧目录> [输出]` | 抽帧拼成带时间戳的总览图 |
 | `node inspect-page.mjs <URL>` | 外部页面勘察：无头加载 JS 站点，输出标题/文本/图片响应清单 |
+| `monitor-chromium.ps1 [秒]` | 监视 Chromium 系进程创建（含父进程与完整命令行），输出 monitor-log.txt。⚠️ 本文件必须保持纯 ASCII |
 
 ## 已知坑（勿重蹈）
 
