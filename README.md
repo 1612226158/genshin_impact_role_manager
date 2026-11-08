@@ -29,6 +29,17 @@ npm run preview    # 本地预览构建产物
 
 要求 Node 20.19+（实测 v24.14.1 / npm 11.11.0）。
 
+## 部署说明
+
+路由使用 history 模式，**部署时需要服务器支持 SPA fallback**（所有路径回退 `index.html`）。
+`vite dev` 与 `vite preview` 均已内置，无需配置；其他静态托管（Nginx、GH Pages 等）需自行添加该规则。
+
+## 已知问题
+
+- **Edge 157 + Windows「动画效果」关闭**的组合下，页面挂载 vue-router 后会触发系统级窗口管理故障
+  （最小化被强制还原、偶现空白窗口）。**使用 Chrome 打开本应用即可规避**（已验证），或更新 Edge 版本。
+  八轮二分实验的完整记录见 `tools/qa/README.md`；诊断开关清单见 `genshin-role-tool/src/main.js` 顶部注释。
+
 ## 素材预处理
 
 仓库内 `genshin-role-tool/public/assets/` 是由原始素材转换的 WebP（186.3 MB → 27.9 MB）。
