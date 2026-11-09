@@ -44,7 +44,7 @@ try {
   })
   console.log('   ', JSON.stringify(badge))
   check('角标为圆形', Boolean(badge) && badge.radius.includes('50%'))
-  check('角标为浅色（亮度 > 180）', Boolean(badge) && badge.lum > 180, `lum=${badge?.lum?.toFixed(0)}`)
+  check('角标为深色半透明（亮度 < 120，原始设计）', Boolean(badge) && badge.lum < 120, `lum=${badge?.lum?.toFixed(0)}`)
   check('角标 28px', Boolean(badge) && badge.size === 28)
 
   console.log('3) 筛选/排序平滑过渡')

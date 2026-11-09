@@ -139,10 +139,9 @@ const stars = computed(() => '★'.repeat(props.character.star || 0))
   display: grid;
   place-items: center;
   border-radius: 50%;
-  /* 圆形浅色角标：让元素图标在深色立绘上保持可读 */
-  background: rgba(240, 235, 224, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  background: rgba(10, 26, 40, 0.32);
+  border: 1px solid rgba(237, 230, 214, 0.15);
+  backdrop-filter: blur(2px);
 }
 .badge :deep(.el) { display: flex; align-items: center; justify-content: center; line-height: 1; }
 
@@ -163,9 +162,9 @@ const stars = computed(() => '★'.repeat(props.character.star || 0))
 }
 
 .flag-edit {
-  background: rgba(240, 235, 224, 0.92);
-  color: #4a3a22;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(10, 26, 40, 0.8);
+  color: var(--gs-gold-hi);
+  border: 1px solid var(--gs-line-hi);
 }
 
 .label {
