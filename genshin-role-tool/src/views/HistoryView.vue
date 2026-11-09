@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import StyledSelect from '@/components/StyledSelect.vue'
 import { useHistoryStore } from '@/stores/history'
 import { useCharacterStore } from '@/stores/character'
 import { useToastStore } from '@/stores/toast'
@@ -29,7 +30,10 @@ const charOptions = computed(() => {
   for (const e of history.list) {
     if (!seen.has(String(e.targetId))) seen.set(String(e.targetId), e.targetName)
   }
-  return [...seen.entries()].map(([id, name]) => ({ id, name }))
+  return [
+    { value: '全部', label: '全部角色' },
+    ...[...seen].map(([id, name]) => ({ value: id, label: name || `#${id}` })),
+  ]
 })
 
 const filtered = computed(() =>
@@ -76,7 +80,10 @@ function doClear() {
   toast.ok('编辑记录已清空')
 }
 
-const actionList = ['全部', ...Object.values(ACTIONS).map((a) => a.label)]
+const actionOptions = [
+  { value: '全部', label: '全部动作' },
+  ...Object.values(ACTIONS).map(({ label }) => ({ value: label, label })),
+]
 </script>
 
 <template>
@@ -86,19 +93,8 @@ const actionList = ['全部', ...Object.values(ACTIONS).map((a) => a.label)]
       title="编辑记录"
       :desc="`共 ${history.count} 条记录，本地上限 ${history.MAX_ENTRIES} 条`"
     >
-      <label class="sel">
-        <span>动作</span>
-        <select v-model="actionFilter">
-          <option v-for="a in actionList" :key="a" :value="a">{{ a }}</option>
-        </select>
-      </label>
-      <label class="sel">
-        <span>角色</span>
-        <select v-model="charFilter">
-          <option value="全部">全部</option>
-          <option v-for="c in charOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-      </label>
+      <StyledSelect v-model="actionFilter" :options="actionOptions" label="动作" compact class="history-filter" />
+      <StyledSelect v-model="charFilter" :options="charOptions" label="角色" compact class="history-filter" />
       <button v-if="history.count" type="button" class="gs-btn" @click="clearTarget = true">
         清空记录
       </button>
@@ -157,29 +153,8 @@ const actionList = ['全部', ...Object.values(ACTIONS).map((a) => a.label)]
 </template>
 
 <style scoped>
-.sel {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--gs-line);
-  border-radius: 999px;
-  font-size: 12.5px;
-  color: var(--gs-ink-3);
-  background: rgba(8, 24, 38, 0.6);
-}
-
-.sel select {
-  border: none;
-  background: none;
-  color: var(--gs-ink);
-  font-size: 13px;
-  outline: none;
-}
-
-.sel option {
-  background: #10293d;
+.history-filter {
+  width: min(152px, 100%);
 }
 
 .timeline {

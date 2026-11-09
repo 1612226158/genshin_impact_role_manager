@@ -19,17 +19,41 @@ const secondaryNavs = [
 ]
 
 const activeKey = computed(() => route.meta?.nav || '')
+
+const OFFICIAL_SITE = 'https://ys.mihoyo.com/main/'
+const BRAND_CLICK_WINDOW_MS = 10_000
+let brandClicks = []
+
+function onBrandClick(event, navigate) {
+  if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+    return navigate(event)
+  }
+
+  const now = performance.now()
+  brandClicks = brandClicks.filter((time) => now - time <= BRAND_CLICK_WINDOW_MS)
+  brandClicks.push(now)
+  if (brandClicks.length === 10) {
+    event.preventDefault()
+    brandClicks = []
+    window.location.assign(OFFICIAL_SITE)
+    return
+  }
+
+  return navigate(event)
+}
 </script>
 
 <template>
   <header class="topbar">
     <div class="bar-inner">
-      <RouterLink to="/" class="brand">
-        <span class="brand-mark" aria-hidden="true">◇</span>
-        <span class="brand-text">
-          <strong>原神</strong>
-          <em>角色工具</em>
-        </span>
+      <RouterLink to="/" custom v-slot="{ href, navigate }">
+        <a :href="href" class="brand" @click="onBrandClick($event, navigate)">
+          <span class="brand-mark" aria-hidden="true">◇</span>
+          <span class="brand-text">
+            <strong>原神</strong>
+            <em>角色工具</em>
+          </span>
+        </a>
       </RouterLink>
 
       <nav class="nav" aria-label="主导航">
