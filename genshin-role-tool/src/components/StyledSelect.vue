@@ -45,7 +45,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 <template>
   <div ref="root" class="styled-select" :class="{ expanded: open, compact }">
     <span v-if="!compact && label && !hideLabel" class="select-label">{{ label }}</span>
-    <button ref="trigger" type="button" class="select-trigger" role="combobox" :aria-label="label"
+    <button ref="trigger" type="button" class="select-trigger" role="combobox" :aria-label="label" :disabled="!options.length"
       :aria-expanded="open" :aria-controls="`${id}-list`" aria-haspopup="listbox"
       :aria-activedescendant="open ? `${id}-${active}` : undefined" @click="open ? open = false : show()" @keydown="key">
       <span class="sel-value">
@@ -77,7 +77,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 .compact .option-list.above { bottom: calc(100% + 5px); }
 .select-label { display: block; color: var(--gs-ink-2); font-size: 12px; margin-bottom: 5px; }
 .select-trigger { width: 100%; min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--gs-line-hi); border-radius: 8px; background: #10293d; font-size: 13px; text-align: left; transition: border-color .18s, background .18s; }
-.select-trigger:hover, .expanded .select-trigger { border-color: var(--gs-gold); background: #17384e; }
+.select-trigger:hover:not(:disabled), .expanded .select-trigger { border-color: var(--gs-gold); background: #17384e; }
+.select-trigger:disabled { cursor: default; opacity: 0.65; }
 .sel-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sel-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sel-text.placeholder { color: var(--gs-ink-3); }

@@ -9,6 +9,7 @@ import StyledSelect from '@/components/StyledSelect.vue'
 import { useCharacterStore } from '@/stores/character'
 import { useToastStore } from '@/stores/toast'
 import { NATIONS, WEAPONS, elementIcon, nationIcon } from '@/utils/element'
+import { birthdayDaysInMonth, parseBirthday } from '@/utils/merge'
 
 const props = defineProps({ characterId: { type: String, required: true }, returnFocus: { default: null } })
 const emit = defineEmits(['close'])
@@ -46,7 +47,6 @@ const errors = reactive({})
 
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
 
 /* 选择项统一走组件库 StyledSelect（带元素/国度图标），不使用系统原生 select */
 const iconUrl = (p) => (p ? assetUrl(p) : '')
@@ -56,11 +56,13 @@ const elementOpts = computed(() =>
 )
 const weaponOpts = WEAPONS.map((w) => ({ value: w, label: w }))
 const starOpts = [5, 4, 3, 2, 1].map((s) => ({ value: s, label: `${s} 星` }))
-const monthOpts = MONTHS.map((m) => ({ value: m, label: `${m} 月` }))
-const dayOpts = DAYS.map((d) => ({ value: d, label: `${d} 日` }))
+const monthOpts = [{ value: '', label: '不设置生日' }, ...MONTHS.map((m) => ({ value: m, label: `${m} 月` }))]
 
 const bdMonth = ref('')
 const bdDay = ref('')
+const dayOpts = computed(() =>
+  Array.from({ length: birthdayDaysInMonth(bdMonth.value) }, (_, i) => ({ value: i + 1, label: `${i + 1} 日` }))
+)
 
 function clone(o) {
   return JSON.parse(JSON.stringify(o))
@@ -134,11 +136,15 @@ onBeforeUnmount(() => {
 })
 
 function syncBirthday() {
+  if (!bdMonth.value || Number(bdDay.value) > birthdayDaysInMonth(bdMonth.value)) {
+    bdDay.value = ''
+  }
   if (bdMonth.value && bdDay.value) {
     form.birthday = `${bdMonth.value}月${bdDay.value}日`
   } else {
     form.birthday = ''
   }
+  delete errors.birthday
   dirty.value = true
 }
 
@@ -149,14 +155,18 @@ function markDirty() {
 function validate() {
   Object.keys(errors).forEach((k) => delete errors[k])
   const star = Number(form.star)
+  const birthday = form.birthday.trim()
   if (!form.name.trim()) errors.name = '名称不能为空'
   if (!star || star < 1 || star > 5) errors.star = '星级需在 1–5 之间'
+  if ((bdMonth.value && !bdDay.value) || (birthday && birthday !== '——' && !parseBirthday(birthday).month)) {
+    errors.birthday = '请选择有效的月份和日期，或选择不设置生日'
+  }
   const dup = store.all.find(
     (c) =>
       c.name.trim() === form.name.trim() && String(c.id) !== String(props.characterId)
   )
   if (dup) errors.name = `已存在同名角色「${dup.name}」，仍可保存`
-  return !errors.name || errors.name.includes('仍可保存')
+  return !errors.birthday && (!errors.name || errors.name.includes('仍可保存'))
 }
 
 function payload() {
@@ -370,10 +380,11 @@ const isEdited = computed(() => store.editedIds.has(String(props.characterId)))
                 v-model="bdDay"
                 :options="dayOpts"
                 hide-label label="生日日期"
-                placeholder="日期"
+                :placeholder="bdMonth ? '选择日期' : '请先选择月份'"
                 @update:model-value="syncBirthday"
               />
             </div>
+            <small v-if="errors.birthday" class="err" role="alert">{{ errors.birthday }}</small>
           </div>
 
           <label class="field">

@@ -1,18 +1,24 @@
-/**
- * 基础角色 + 用户覆盖层 → 合并视图
- * images / story / cv 需要逐层合并，其余字段直接覆盖
- */
 const BIRTHDAY_RE = /^\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*$/
+// 生日不带年份，2 月保留 29 日。
+const BIRTHDAY_MONTH_LENGTHS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+export function birthdayDaysInMonth(month) {
+  return BIRTHDAY_MONTH_LENGTHS[Number(month) - 1] ?? 0
+}
 
 export function parseBirthday(text) {
   const m = BIRTHDAY_RE.exec(String(text || ''))
   if (!m) return { month: null, day: null }
   const month = Number(m[1])
   const day = Number(m[2])
-  if (month < 1 || month > 12 || day < 1 || day > 31) return { month: null, day: null }
+  if (day < 1 || day > birthdayDaysInMonth(month)) return { month: null, day: null }
   return { month, day }
 }
 
+/**
+ * 基础角色 + 用户覆盖层 → 合并视图
+ * images / story / cv 需要逐层合并，其余字段直接覆盖
+ */
 export function mergeCharacter(base, patch) {
   if (!patch) return base
   const out = { ...base, ...patch }

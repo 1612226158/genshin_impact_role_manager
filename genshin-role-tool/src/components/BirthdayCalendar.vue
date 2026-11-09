@@ -26,7 +26,7 @@ const avatarOf = (c) => assetUrl(c?.images?.avatar || c?.images?.avatar_hd || ''
 
 function pick(cell) {
   if (!cell.first) return
-  emit('pick', cell.first)
+  emit('pick', cell.list, cell.day)
 }
 function onKey(e, cell) {
   if (e.key === 'Enter' || e.key === ' ') {
@@ -46,7 +46,10 @@ function onKey(e, cell) {
         :class="{ has: cell.first, multi: cell.list.length > 1, today: isToday(cell.day) }"
         :role="cell.first ? 'button' : undefined"
         :tabindex="cell.first ? 0 : undefined"
-        :aria-label="cell.first ? `${month} 月 ${cell.day} 日：${cell.first.name}，查看详情` : `${month} 月 ${cell.day} 日`"
+        :aria-haspopup="cell.list.length > 1 ? 'dialog' : undefined"
+        :aria-label="cell.list.length > 1
+          ? `${month} 月 ${cell.day} 日，${cell.list.length} 位角色生日，选择角色`
+          : cell.first ? `${month} 月 ${cell.day} 日：${cell.first.name}，查看详情` : `${month} 月 ${cell.day} 日`"
         @click="pick(cell)"
         @keydown="onKey($event, cell)"
       >

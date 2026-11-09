@@ -73,11 +73,11 @@ try {
 
   console.log('5) 点击生日格跳转角色详情')
   const target = await page.evaluate(() => {
-    const cell = [...document.querySelectorAll('.cal-slide[aria-hidden="false"] .cell')].find((c) => c.querySelector('.face'))
+    const cell = document.querySelector('.cal-slide[aria-hidden="false"] .cell.has:not(.multi)')
     return { day: cell.querySelector('.dnum').textContent.trim(), name: cell.querySelector('.face').alt }
   })
   await page.evaluate(() => {
-    const cell = [...document.querySelectorAll('.cal-slide[aria-hidden="false"] .cell')].find((c) => c.querySelector('.face'))
+    const cell = document.querySelector('.cal-slide[aria-hidden="false"] .cell.has:not(.multi)')
     cell.click()
   })
   await sleep(900)
@@ -86,9 +86,26 @@ try {
   check('跳转到 /c/{id} 详情页', /^\/c\/.+/.test(nav.path), nav.path)
   check('详情页角色与所点格子一致', nav.h1 === target.name, `${target.name} vs ${nav.h1}`)
 
+  console.log('6) 同日生日可选择任意角色')
+  await openRoute(page, BASE, '/birthday')
+  await pickMonth(page, 2)
+  const sharedCell = '.cal-slide[aria-hidden="false"] .cell.multi:nth-child(2)'
+  await page.focus(sharedCell)
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('.birthday-picker')?.open)
+  const names = await page.$$eval('.birthday-picker .picker-role .bn', (items) => items.map((item) => item.textContent))
+  check('2 月 2 日列出林尼和琳妮特', names.length === 2 && names.includes('林尼') && names.includes('琳妮特'))
+  await page.keyboard.press('Escape')
+  check('关闭后焦点回到原日期格', await page.evaluate((selector) => document.activeElement.matches(selector), sharedCell))
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('.birthday-picker')?.open)
+  await page.click('.birthday-picker .picker-role:nth-child(2)')
+  await page.waitForFunction((name) => document.querySelector('.name-row h1')?.textContent === name, {}, names[1])
+  check('第二位角色可独立进入详情', /^\/c\/.+/.test(new URL(page.url()).pathname), names[1])
+
   console.log(failed ? `\n结果：${failed} 项失败` : '\n全部通过')
   await browser.close()
-  process.exit(failed ? 1 : 0)
+  process.exitCode = failed ? 1 : 0
 } finally {
   server.kill()
   await sleep(300)

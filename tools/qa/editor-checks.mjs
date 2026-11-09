@@ -91,7 +91,8 @@ try {
   const bd = { closedText, list }
   console.log('   ', JSON.stringify(bd))
   check('月份闭合态为「N 月」格式', bd.closedText && /^\d{1,2} 月$/.test(bd.closedText), `text="${bd.closedText}"`)
-  check('12 个月份标签互不重复', new Set(bd.list).size === bd.list.length && bd.list.length === 12, `len=${bd.list.length}`)
+  const months = bd.list.filter((label) => /^\d{1,2} 月$/.test(label))
+  check('12 个月份标签互不重复', new Set(months).size === 12 && months.length === 12, `len=${months.length}`)
   check('不含重复语义的「一月」写法', !bd.list.some((t) => t.includes('一月') || t.includes('1月')))
   const dayText = await page.evaluate(() => {
     const d = document.querySelector('dialog[open] .select-trigger[aria-label="生日日期"]')
@@ -152,11 +153,43 @@ try {
   check('高度差 ≤ 1px', Math.abs(parity.input.h - parity.trigger.h) <= 1, `${parity.input.h} vs ${parity.trigger.h}`)
 
   await page.screenshot({ path: `${OUT_DIR}/editor-fixed.png` })
-  await page.keyboard.press('Escape')
+
+  console.log('8) 生日日期随月份变化并阻止保存不完整日期')
+  const field = (name) => `dialog[open] .select-trigger[aria-label="生日${name}"]`
+  const choose = async (name, label) => {
+    await page.evaluate((selector) => document.querySelector(selector).click(), field(name))
+    await page.evaluate((selector, value) => {
+      const options = [...document.querySelector(selector).parentElement.querySelectorAll('.select-option')]
+      options.find((option) => option.querySelector('.opt-main').textContent.trim() === value).click()
+    }, field(name), label)
+  }
+  const save = () => page.evaluate(() => document.querySelector('dialog[open] .head-ops .primary').click())
+  await choose('月份', '1 月')
+  await choose('日期', '31 日')
+  await choose('月份', '2 月')
+  await save()
+  check('换成 2 月后清空 31 日并拦截保存', Boolean(await page.$('dialog[open] .bd + .err')))
+  await page.evaluate((selector) => document.querySelector(selector).click(), field('日期'))
+  const dayOptions = `${field('日期')} + .option-list .select-option`
+  const days = await page.$$eval(dayOptions, (items) => items.map((item) => item.querySelector('.opt-main').textContent.trim()))
+  check('2 月仅提供 1 至 29 日', days.length === 29 && days.at(-1) === '29 日')
+  await page.evaluate((selector) => [...document.querySelectorAll(selector)].at(-1).click(), dayOptions)
+  await save()
+  await page.waitForFunction(() => !document.querySelector('dialog[open]'))
+  check('2 月 29 日可以保存到角色详情', await page.$eval('.tab-body', (body) => body.textContent.includes('2月29日')))
+
+  await openRoute(page, BASE, '/c/509226')
+  await page.waitForFunction(() => [...document.querySelectorAll('.actions button')].some((b) => b.textContent.trim() === '编辑'))
+  await page.evaluate(() => [...document.querySelectorAll('.actions button')].find((b) => b.textContent.trim() === '编辑').click())
+  await page.waitForFunction(() => Boolean(document.querySelector('dialog[open] .form')))
+  check('未设置月份时日期不可选', await page.$eval(field('日期'), (button) => button.disabled))
+  await save()
+  await page.waitForFunction(() => !document.querySelector('dialog[open]'))
+  check('原数据中的无生日占位不会阻止保存', await page.$eval('.tab-body', (body) => body.textContent.includes('——')))
 
   console.log(failed ? `\n结果：${failed} 项失败` : '\n全部通过')
   await browser.close()
-  process.exit(failed ? 1 : 0)
+  process.exitCode = failed ? 1 : 0
 } finally {
   server.kill()
   await sleep(300)

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import BirthdayCardCanvas from '@/components/BirthdayCardCanvas.vue'
@@ -10,6 +10,8 @@ import { useAlbumStore } from '@/stores/album'
 import { useToastStore } from '@/stores/toast'
 import { assetUrl } from '@/utils/asset'
 import { pickGreeting } from '@/utils/greetings'
+import { birthdayDaysInMonth as daysInMonth } from '@/utils/merge'
+import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 
 const store = useCharacterStore()
 const album = useAlbumStore()
@@ -25,13 +27,6 @@ const qDay = ref(todayD)
 const browseMonth = ref(todayM)
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
-
-/** 无年份概念：固定 12 个月的日历长度；2 月按 29 天（存在 2/29 生日） */
-const CAL_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-
-function daysInMonth(m) {
-  return CAL_DAYS[m - 1] || 30
-}
 
 const dayOptions = computed(() => Array.from({ length: daysInMonth(qMonth.value) }, (_, i) => i + 1))
 
@@ -72,8 +67,31 @@ const monthGroups = computed(() => {
 
 const monthCount = computed(() => monthGroups.value.reduce((s, g) => s + g.list.length, 0))
 
+const picker = ref(null)
+const pickedDate = ref(null)
+
+function closePicker() {
+  if (!picker.value?.open) return
+  picker.value.close()
+  unlockScroll()
+  pickedDate.value = null
+}
+
 function goCharacter(c) {
-  if (c?.id) router.push(`/c/${c.id}`)
+  closePicker()
+  router.push(`/c/${c.id}`)
+}
+
+async function pickBirthday(characters, day) {
+  if (characters.length === 1) {
+    goCharacter(characters[0])
+    return
+  }
+  pickedDate.value = { month: browseMonth.value, day, characters }
+  await nextTick()
+  if (!picker.value || picker.value.open) return
+  picker.value.showModal()
+  lockScroll()
 }
 
 /* ---------- 月历轮播：循环轨道（首尾克隆）+ CSS 过渡，一次手势切一个月 ---------- */
@@ -191,6 +209,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  closePicker()
   ro?.disconnect()
   ro = null
 })
@@ -243,7 +262,7 @@ onMounted(() => {
   const first = upcoming.value[0]
   if (first) {
     selectedId.value = first.c.id
-    browseMonth.value = first.c.birthdayMonth
+    goMonth(first.c.birthdayMonth)
   } else {
     selectedId.value = withBirthday.value[0]?.id || ''
   }
@@ -407,14 +426,15 @@ function avatarOf(c) {
                 v-for="(m, i) in SLIDES"
                 :key="`${i}-${m}`"
                 class="cal-slide"
-                :aria-hidden="browseMonth !== m"
+                :aria-hidden="posIndex !== i"
+                :inert="posIndex !== i"
               >
                 <BirthdayCalendar
                   :month="monthData[m].m"
                   :days="monthData[m].days"
                   :by-day="monthData[m].byDay"
                   :today="{ month: todayM, day: todayD }"
-                  @pick="goCharacter"
+                  @pick="pickBirthday"
                 />
               </div>
             </div>
@@ -471,10 +491,53 @@ function avatarOf(c) {
         </div>
       </aside>
     </div>
+
+    <dialog ref="picker" class="gs-panel birthday-picker" aria-labelledby="birthday-picker-title" @cancel.prevent="closePicker">
+      <template v-if="pickedDate">
+        <header class="phead">
+          <h2 id="birthday-picker-title">{{ pickedDate.month }} 月 {{ pickedDate.day }} 日生日</h2>
+          <button type="button" class="gs-btn" autofocus @click="closePicker">关闭</button>
+        </header>
+        <div class="picker-roles">
+          <button v-for="c in pickedDate.characters" :key="c.id" type="button" class="banner-item picker-role" @click="goCharacter(c)">
+            <img v-if="avatarOf(c)" :src="avatarOf(c)" alt="" />
+            <span class="bn">{{ c.name }}</span>
+            <span v-if="c.title" class="bd">{{ c.title }}</span>
+          </button>
+        </div>
+      </template>
+    </dialog>
   </div>
 </template>
 
 <style scoped>
+.birthday-picker {
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 18px;
+  color: var(--gs-ink);
+  background: #10293d;
+}
+
+.birthday-picker::backdrop {
+  background: #030c16b8;
+}
+
+.birthday-picker .phead {
+  justify-content: space-between;
+}
+
+.picker-roles {
+  display: grid;
+  gap: 8px;
+}
+
+.picker-role {
+  padding: 8px 12px;
+  text-align: left;
+}
+
 .banner {
   display: flex;
   align-items: center;
