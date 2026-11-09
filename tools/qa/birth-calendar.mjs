@@ -71,35 +71,68 @@ try {
   })
   check('前 6 个有生日格子均无重叠', overlap.every((x) => x === false), JSON.stringify(overlap))
 
-  console.log('5) 点击生日格跳转角色详情')
-  const target = await page.evaluate(() => {
-    const cell = document.querySelector('.cal-slide[aria-hidden="false"] .cell.has:not(.multi)')
-    return { day: cell.querySelector('.dnum').textContent.trim(), name: cell.querySelector('.face').alt }
-  })
-  await page.evaluate(() => {
-    const cell = document.querySelector('.cal-slide[aria-hidden="false"] .cell.has:not(.multi)')
-    cell.click()
-  })
-  await sleep(900)
-  const nav = await page.evaluate(() => ({ path: location.pathname, h1: document.querySelector('.name-row h1')?.textContent || '' }))
-  console.log('   ', JSON.stringify({ target, nav }))
-  check('跳转到 /c/{id} 详情页', /^\/c\/.+/.test(nav.path), nav.path)
-  check('详情页角色与所点格子一致', nav.h1 === target.name, `${target.name} vs ${nav.h1}`)
+  await page.setViewport({ width: 1100, height: 800 })
+  check('1100px PC 窗口仍并排显示月历和生日卡', await page.evaluate(() => {
+    const main = document.querySelector('.layout > .main').getBoundingClientRect()
+    const card = document.querySelector('.cardpanel').getBoundingClientRect()
+    return card.left >= main.right && card.right <= innerWidth
+  }))
+
+  console.log('5) 单人生日格也可以选择制作生日卡或查看详情')
+  const singleCell = '.cal-slide[aria-hidden="false"] .cell.has:not(.multi)'
+  const target = await page.$eval(`${singleCell} .face`, (img) => img.alt)
+  const waitForPicker = () => page.waitForFunction(() => document.querySelector('.birthday-picker')?.open, { timeout: 5000 })
+  await page.click(singleCell)
+  await waitForPicker()
+  check('单人弹窗只列出该角色', await page.$$eval('.birthday-picker .bn', (items) =>
+    items.map((item) => item.textContent).join(',')
+  ) === target)
+  check('单人弹窗提供详情和制卡', Boolean(await page.$('.birthday-picker .picker-character')) &&
+    Boolean(await page.$('.birthday-picker .picker-card')))
+  await page.click('.birthday-picker .picker-card')
+  const cardTitle = () => page.$eval('.card-head h2', (heading) => heading.textContent)
+  check('生日卡选中该角色', await cardTitle() === `${target} · 生日卡`)
+  check('生日卡保留角色详情入口', await page.$eval('.card-head a', (link) => /^\/c\/.+/.test(link.pathname)))
+  check('所选角色的日期格高亮', await page.$eval('.cal-slide[aria-hidden="false"] .cell.selected .face', (img) => img.alt) === target)
 
   console.log('6) 同日生日可选择任意角色')
-  await openRoute(page, BASE, '/birthday')
-  await pickMonth(page, 2)
   const sharedCell = '.cal-slide[aria-hidden="false"] .cell.multi:nth-child(2)'
+  const originalAvatar = await page.$eval(`${sharedCell} .face`, (img) => img.src)
   await page.focus(sharedCell)
   await page.keyboard.press('Enter')
-  await page.waitForFunction(() => document.querySelector('.birthday-picker')?.open)
+  await waitForPicker()
   const names = await page.$$eval('.birthday-picker .picker-role .bn', (items) => items.map((item) => item.textContent))
   check('2 月 2 日列出林尼和琳妮特', names.length === 2 && names.includes('林尼') && names.includes('琳妮特'))
   await page.keyboard.press('Escape')
   check('关闭后焦点回到原日期格', await page.evaluate((selector) => document.activeElement.matches(selector), sharedCell))
   await page.keyboard.press('Enter')
-  await page.waitForFunction(() => document.querySelector('.birthday-picker')?.open)
-  await page.click('.birthday-picker .picker-role:nth-child(2)')
+  await waitForPicker()
+  const chosenAvatar = await page.$eval('.birthday-picker .picker-role:nth-child(2) img', (img) => img.src)
+  await page.click('.birthday-picker .picker-role:nth-child(2) .picker-card')
+  check('第二位角色可直接制作生日卡', await cardTitle() === `${names[1]} · 生日卡`)
+  check('日期格换成第二位角色头像并保留 +1', chosenAvatar !== originalAvatar &&
+    await page.$eval(`${sharedCell} .face`, (img) => img.src) === chosenAvatar &&
+    await page.$eval(`${sharedCell} .more`, (badge) => badge.textContent.trim()) === '+1')
+  check('制卡后关闭选择弹窗并聚焦生日卡', await page.evaluate(() =>
+    !document.querySelector('.birthday-picker').open && document.activeElement.matches('.card-head h2')
+  ))
+  await page.waitForFunction(() => Boolean(document.querySelector('.cardpanel canvas')) && !document.querySelector('.cardpanel .hint'))
+  await page.click('.cardpanel .ops button:last-child')
+  await page.waitForFunction((name) => (JSON.parse(localStorage.getItem('gsr.album.v1') || '[]')).some((item) =>
+    item.kind === 'card' && item.title === `${name} 生日卡`
+  ), { timeout: 8000 }, names[1])
+  check('生成的生日卡按正确角色保存到相册', true, names[1])
+
+  await page.click(singleCell)
+  await waitForPicker()
+  await page.click('.birthday-picker .picker-card')
+  check('给其他日期制卡时保留已更换的头像', await cardTitle() === `${target} · 生日卡` &&
+    await page.$eval(`${sharedCell} .face`, (img) => img.src) === chosenAvatar)
+
+  await page.focus(sharedCell)
+  await page.keyboard.press('Enter')
+  await waitForPicker()
+  await page.click('.birthday-picker .picker-role:nth-child(2) .picker-character')
   await page.waitForFunction((name) => document.querySelector('.name-row h1')?.textContent === name, {}, names[1])
   check('第二位角色可独立进入详情', /^\/c\/.+/.test(new URL(page.url()).pathname), names[1])
 

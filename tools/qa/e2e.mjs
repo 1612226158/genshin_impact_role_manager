@@ -102,22 +102,20 @@ try {
   console.log('5) 生日同日查询（含 2/29 边界）')
   await openRoute(page, BASE, '/birthday')
   await sleep(600)
-  const set = await page.evaluate(({ m, d }) => {
-    const sels = [...document.querySelectorAll('select')]
-    if (sels.length < 2) return false
-    const s = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set
-    s.call(sels[0], m)
-    sels[0].dispatchEvent(new Event('change', { bubbles: true }))
-    s.call(sels[1], d)
-    sels[1].dispatchEvent(new Event('change', { bubbles: true }))
-    return true
-  }, { m: '2', d: '28' })
+  for (const [label, value] of [['月份', 2], ['日期', 28]]) {
+    const trigger = `.qbar [role="combobox"][aria-label="${label}"]`
+    await page.click(trigger)
+    await page.click(`${trigger} + [role="listbox"] [role="option"]:nth-child(${value})`)
+  }
+  const set = await page.$$eval('.qbar .sel-text', (labels) =>
+    labels.map((label) => label.textContent.trim()).join(',') === '2 月,28 日'
+  )
   check('切换到 2 月 28 日', set)
   await sleep(600)
   check(
     '2/28 命中闰年生日的班尼特',
     await page.evaluate(() => {
-      const t = document.body.innerText
+      const t = document.querySelector('.results')?.innerText || ''
       return t.includes('班尼特') && t.includes('闰年生日')
     })
   )

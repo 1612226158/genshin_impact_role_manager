@@ -90,6 +90,7 @@ try {
         overflow: getComputedStyle(document.querySelector('.cal-carousel')).overflow,
         transition: getComputedStyle(track).transitionDuration,
         month: document.querySelector('.mtab.on')?.textContent.trim(),
+        activeSlides: document.querySelectorAll('.cal-slide:not([inert])').length,
       }
     })
   const s0 = await state()
@@ -185,14 +186,50 @@ try {
   check('点击 7 月后轨道定位到 7 月', Math.abs(after7.x - expect7) <= 4, `${after7.x} vs ${expect7}`)
   check('7 月页签高亮', after7.month?.startsWith('7月'), after7.month)
 
-  console.log('6) 无整页横向溢出')
+  console.log('6) 连续方向键跨年与关闭动效')
+  const checkMonth = async (month, label) => {
+    const current = await state()
+    check(label, current.month?.startsWith(`${month}月`) && current.activeSlides === 1 &&
+      Math.abs(current.x + current.w * month) <= 4, JSON.stringify(current))
+  }
+  const fastSteps = async (key) => {
+    await page.focus('.cal-carousel')
+    await page.keyboard.press(key)
+    await page.keyboard.press(key)
+  }
+  await clickMonth(12)
+  await fastSteps('ArrowRight')
+  await sleep(600)
+  await checkMonth(2, '动效开启时快速向后两步，12 月 → 2 月')
+  await clickMonth(1)
+  await fastSteps('ArrowLeft')
+  await sleep(600)
+  await checkMonth(11, '动效开启时快速向前两步，1 月 → 11 月')
+
+  await page.evaluate(() => document.documentElement.classList.add('no-motion'))
+  await clickMonth(12)
+  await fastSteps('ArrowRight')
+  await checkMonth(2, '动效关闭时向后跨年后继续切月')
+  await clickMonth(1)
+  await fastSteps('ArrowLeft')
+  await checkMonth(11, '动效关闭时向前跨年后继续切月')
+  await page.evaluate(() => document.documentElement.classList.remove('no-motion'))
+
+  console.log('7) 最近生日入口同步月份和轨道')
+  await page.$eval('.banner-item', (button) => button.click())
+  await sleep(650)
+  const date = await page.$eval('.cal-slide:not([inert]) .cell.selected', (cell) => cell.getAttribute('aria-label'))
+  const selectedMonth = Number(date.match(/^(\d+) 月/)[1])
+  await checkMonth(selectedMonth, '最近生日所在月份与轨道一致')
+
+  console.log('8) 无整页横向溢出')
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   check('页面无横向溢出', overflow <= 1, `overflow=${overflow}`)
 
   await page.screenshot({ path: `${OUT_DIR}/birth-carousel.png` })
   console.log(failed ? `\n结果：${failed} 项失败` : '\n全部通过')
   await browser.close()
-  process.exit(failed ? 1 : 0)
+  process.exitCode = failed ? 1 : 0
 } finally {
   server.kill()
   await sleep(300)

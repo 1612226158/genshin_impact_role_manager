@@ -9,6 +9,8 @@ const props = defineProps({
   /** { [day]: character[] } */
   byDay: { type: Object, default: () => ({}) },
   today: { type: Object, default: () => ({ month: 0, day: 0 }) },
+  activeId: { type: [String, Number], default: null },
+  preferredByDay: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['pick'])
 
@@ -17,7 +19,8 @@ const cells = computed(() =>
   Array.from({ length: props.days }, (_, i) => {
     const day = i + 1
     const list = props.byDay[day] || []
-    return { day, list, first: list[0] || null }
+    const cover = list.find((c) => c.id === props.preferredByDay[day]) ?? list[0]
+    return { day, list, cover }
   })
 )
 
@@ -25,7 +28,7 @@ const isToday = (day) => props.today.month === props.month && props.today.day ==
 const avatarOf = (c) => assetUrl(c?.images?.avatar || c?.images?.avatar_hd || '')
 
 function pick(cell) {
-  if (!cell.first) return
+  if (!cell.cover) return
   emit('pick', cell.list, cell.day)
 }
 function onKey(e, cell) {
@@ -43,35 +46,35 @@ function onKey(e, cell) {
         v-for="cell in cells"
         :key="cell.day"
         class="cell"
-        :class="{ has: cell.first, multi: cell.list.length > 1, today: isToday(cell.day) }"
-        :role="cell.first ? 'button' : undefined"
-        :tabindex="cell.first ? 0 : undefined"
-        :aria-haspopup="cell.list.length > 1 ? 'dialog' : undefined"
+        :class="{ has: cell.cover, multi: cell.list.length > 1, today: isToday(cell.day), selected: cell.list.some((c) => c.id === activeId) }"
+        :role="cell.cover ? 'button' : undefined"
+        :tabindex="cell.cover ? 0 : undefined"
+        :aria-haspopup="cell.cover ? 'dialog' : undefined"
         :aria-label="cell.list.length > 1
           ? `${month} 月 ${cell.day} 日，${cell.list.length} 位角色生日，选择角色`
-          : cell.first ? `${month} 月 ${cell.day} 日：${cell.first.name}，查看详情` : `${month} 月 ${cell.day} 日`"
+          : cell.cover ? `${month} 月 ${cell.day} 日：${cell.cover.name}，选择操作` : `${month} 月 ${cell.day} 日`"
         @click="pick(cell)"
         @keydown="onKey($event, cell)"
       >
         <span class="dnum nums">{{ cell.day }}</span>
 
-        <template v-if="cell.first">
+        <template v-if="cell.cover">
           <span class="who">
             <img
-              v-if="avatarOf(cell.first)"
+              v-if="avatarOf(cell.cover)"
               class="face"
-              :src="avatarOf(cell.first)"
-              :alt="cell.first.name"
+              :src="avatarOf(cell.cover)"
+              :alt="cell.cover.name"
               loading="lazy"
               draggable="false"
-              :style="{ '--c': elementColor(cell.first.element) }"
+              :style="{ '--c': elementColor(cell.cover.element) }"
             />
-            <span v-else class="face face-fallback" :style="{ '--c': elementColor(cell.first.element) }">
-              {{ (cell.first.name || '?').slice(0, 1) }}
+            <span v-else class="face face-fallback" :style="{ '--c': elementColor(cell.cover.element) }">
+              {{ (cell.cover.name || '?').slice(0, 1) }}
             </span>
           </span>
           <span v-if="cell.list.length > 1" class="more nums">+{{ cell.list.length - 1 }}</span>
-          <span class="tip">{{ cell.first.name }}</span>
+          <span class="tip">{{ cell.cover.name }}</span>
         </template>
       </div>
     </div>
@@ -108,12 +111,17 @@ function onKey(e, cell) {
   background: rgba(211, 188, 142, 0.05);
 }
 
+.cell.selected,
 .cell.has:hover,
 .cell.has:focus-visible {
   border-color: var(--gs-gold);
   background: rgba(211, 188, 142, 0.11);
-  transform: translateY(-1px);
   outline: none;
+}
+
+.cell.has:hover,
+.cell.has:focus-visible {
+  transform: translateY(-1px);
 }
 
 .cell.today {

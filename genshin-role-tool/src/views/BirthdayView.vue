@@ -5,6 +5,7 @@ import PageHead from '@/components/PageHead.vue'
 import BirthdayCardCanvas from '@/components/BirthdayCardCanvas.vue'
 import BirthdayCalendar from '@/components/BirthdayCalendar.vue'
 import ElementBadge from '@/components/ElementBadge.vue'
+import StyledSelect from '@/components/StyledSelect.vue'
 import { useCharacterStore } from '@/stores/character'
 import { useAlbumStore } from '@/stores/album'
 import { useToastStore } from '@/stores/toast'
@@ -27,8 +28,11 @@ const qDay = ref(todayD)
 const browseMonth = ref(todayM)
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
+const MONTH_OPTIONS = MONTHS.map((month) => ({ value: month, label: `${month} 月` }))
 
-const dayOptions = computed(() => Array.from({ length: daysInMonth(qMonth.value) }, (_, i) => i + 1))
+const dayOptions = computed(() =>
+  Array.from({ length: daysInMonth(qMonth.value) }, (_, i) => ({ value: i + 1, label: `${i + 1} 日` }))
+)
 
 watch(qMonth, (m) => {
   if (qDay.value > daysInMonth(m)) qDay.value = daysInMonth(m)
@@ -52,23 +56,9 @@ const queryResults = computed(() => {
   return { exact, leapHint, all: [...exact, ...leapHint] }
 })
 
-const monthGroups = computed(() => {
-  const map = new Map()
-  for (const c of withBirthday.value) {
-    if (c.birthdayMonth !== browseMonth.value) continue
-    const key = c.birthdayDay
-    if (!map.has(key)) map.set(key, [])
-    map.get(key).push(c)
-  }
-  return [...map.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([day, list]) => ({ day, list }))
-})
-
-const monthCount = computed(() => monthGroups.value.reduce((s, g) => s + g.list.length, 0))
-
 const picker = ref(null)
 const pickedDate = ref(null)
+const preferredAvatars = ref({})
 
 function closePicker() {
   if (!picker.value?.open) return
@@ -83,10 +73,6 @@ function goCharacter(c) {
 }
 
 async function pickBirthday(characters, day) {
-  if (characters.length === 1) {
-    goCharacter(characters[0])
-    return
-  }
   pickedDate.value = { month: browseMonth.value, day, characters }
   await nextTick()
   if (!picker.value || picker.value.open) return
@@ -96,10 +82,14 @@ async function pickBirthday(characters, day) {
 
 /* ---------- 月历轮播：循环轨道（首尾克隆）+ CSS 过渡，一次手势切一个月 ---------- */
 const viewportRef = ref(null)
-const trackRef = ref(null)
-const slideW = ref(0)
 let wheelLock = 0
-let ro = null
+let wrapTimer
+let snapFrame
+const SLIDE_MS = 420
+
+function motionOff() {
+  return document.documentElement.classList.contains('no-motion')
+}
 
 function byDayFor(m) {
   const map = {}
@@ -129,6 +119,7 @@ const monthCounts = computed(() => {
   for (const m of MONTHS) o[m] = withBirthday.value.filter((c) => c.birthdayMonth === m).length
   return o
 })
+const monthCount = computed(() => monthCounts.value[browseMonth.value])
 
 /** 轨道下标（0..13）；真实月份 m 对应下标 m */
 const posIndex = ref(browseMonth.value)
@@ -136,82 +127,70 @@ const posIndex = ref(browseMonth.value)
 const jumping = ref(false)
 
 const trackStyle = computed(() => ({
-  transform: `translateX(${-posIndex.value * slideW.value}px)`,
+  transform: `translateX(${-posIndex.value * 100}%)`,
+  '--slide-duration': `${SLIDE_MS}ms`,
 }))
 
-const slideMonth = (i) => SLIDES[i]
-
-/** 直接定位到某月（页签点击）：按下标动画滚动 */
-function goMonth(m) {
-  browseMonth.value = Math.min(12, Math.max(1, m))
+function snapToMonth() {
   posIndex.value = browseMonth.value
-}
-
-/** 静默瞬移到等价位置（不播动画） */
-function jumpTo(m, index) {
+  if (jumping.value) return
   jumping.value = true
-  posIndex.value = index
-  browseMonth.value = m
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
+  snapFrame = requestAnimationFrame(() => {
+    snapFrame = requestAnimationFrame(() => {
       jumping.value = false
     })
   })
 }
 
-/** 步进一格，允许落到克隆位；过渡结束后再瞬移归位 */
-function step(dir) {
-  const next = posIndex.value + dir
-  posIndex.value = next
-  browseMonth.value = SLIDES[next]
+function goMonth(month, direction = 0) {
+  if (month === browseMonth.value) return
+  clearTimeout(wrapTimer)
+  const wasWrapping = posIndex.value !== browseMonth.value
+  browseMonth.value = month
+
+  // 克隆只用于过渡。关闭动效或中途再操作时，直接定位到实际月份。
+  if (motionOff() || wasWrapping || jumping.value) {
+    snapToMonth()
+    return
+  }
+
+  if (direction > 0 && month === 1) posIndex.value = SLIDES.length - 1
+  else if (direction < 0 && month === 12) posIndex.value = 0
+  else posIndex.value = month
+
+  if (posIndex.value !== month) {
+    wrapTimer = setTimeout(snapToMonth, SLIDE_MS + 24)
+  }
 }
 
-function onTrackTransitionEnd(e) {
-  // 只看轨道自身的 transform（子元素过渡会冒泡上来）
-  if (e.target !== trackRef.value || e.propertyName !== 'transform' || jumping.value) return
-  const i = posIndex.value
-  if (i === 0) jumpTo(12, 12)
-  else if (i === SLIDES.length - 1) jumpTo(1, 1)
+function step(direction) {
+  const nextMonth = (browseMonth.value - 1 + direction + MONTHS.length) % MONTHS.length + 1
+  goMonth(nextMonth, direction)
 }
 
 /** 滚轮切月：横向滚轮与普通纵向滚轮都支持；循环轮播因此不再有边界 */
 function onWheel(e) {
-  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1
-  const rawX = e.deltaX * unit
-  const rawY = e.deltaY * unit
-  const delta = Math.abs(rawX) > Math.abs(rawY) ? rawX : rawY
+  if (e.ctrlKey || e.metaKey) return
+  const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
   if (!delta) return
   e.preventDefault()
   const now = performance.now()
   if (now < wheelLock) return
-  wheelLock = now + 460
+  wheelLock = now + SLIDE_MS + 40
   step(delta > 0 ? 1 : -1)
 }
 
 function onTrackKey(e) {
-  if (e.key === 'ArrowLeft') {
-    e.preventDefault()
-    step(-1)
-  } else if (e.key === 'ArrowRight') {
-    e.preventDefault()
-    step(1)
-  }
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+  e.preventDefault()
+  viewportRef.value.focus({ preventScroll: true })
+  step(e.key === 'ArrowLeft' ? -1 : 1)
 }
-
-onMounted(() => {
-  const el = viewportRef.value
-  if (!el) return
-  slideW.value = el.clientWidth
-  ro = new ResizeObserver(() => {
-    slideW.value = el.clientWidth
-  })
-  ro.observe(el)
-})
 
 onBeforeUnmount(() => {
   closePicker()
-  ro?.disconnect()
-  ro = null
+  clearTimeout(wrapTimer)
+  cancelAnimationFrame(snapFrame)
 })
 
 const noBirthday = computed(() => store.all.filter((c) => !c.birthdayMonth || !c.birthdayDay))
@@ -239,6 +218,10 @@ const upcoming = computed(() => {
 })
 
 /* ---------- 生日卡 ---------- */
+const CARD_TEMPLATES = [
+  { value: 'portrait', label: '竖版 4:5 · 1080×1350' },
+  { value: 'square', label: '方版 1:1 · 1080×1080' },
+]
 const selectedId = ref('')
 const template = ref('portrait')
 const greeting = ref('')
@@ -269,10 +252,12 @@ onMounted(() => {
 })
 
 const cardRef = ref(null)
+const cardHeading = ref(null)
 const saving = ref(false)
 
 async function downloadCard() {
-  if (!selected.value) {
+  const character = selected.value
+  if (!character) {
     toast.warn('先选择一个角色')
     return
   }
@@ -284,7 +269,7 @@ async function downloadCard() {
   const el = document.createElement('a')
   const url = URL.createObjectURL(blob)
   el.href = url
-  el.download = `原神-${selected.value.name}-生日卡.png`
+  el.download = `原神-${character.name}-生日卡.png`
   document.body.appendChild(el)
   el.click()
   el.remove()
@@ -293,14 +278,15 @@ async function downloadCard() {
 }
 
 async function saveCard() {
-  if (!selected.value) return
+  const character = selected.value
+  if (!character) return
   saving.value = true
   try {
     const blob = await cardRef.value?.exportBlob()
     if (!blob) throw new Error('empty')
     await album.addCard(blob, {
-      title: `${selected.value.name} 生日卡`,
-      characterId: selected.value.id,
+      title: `${character.name} 生日卡`,
+      characterId: character.id,
       kind: 'card',
     })
     toast.ok('已保存到相册')
@@ -313,6 +299,19 @@ async function saveCard() {
 
 function selectChar(c) {
   selectedId.value = c.id
+}
+
+async function makeBirthdayCard(c) {
+  const { month, day, characters } = pickedDate.value
+  if (characters.length > 1) {
+    const monthAvatars = preferredAvatars.value[month]
+    preferredAvatars.value[month] = { ...monthAvatars, [day]: c.id }
+  }
+  closePicker()
+  selectChar(c)
+  await nextTick()
+  cardHeading.value?.focus({ preventScroll: true })
+  cardHeading.value?.scrollIntoView({ block: 'nearest', behavior: motionOff() ? 'instant' : 'smooth' })
 }
 
 function avatarOf(c) {
@@ -336,7 +335,7 @@ function avatarOf(c) {
           :key="u.c.id"
           type="button"
           class="banner-item"
-          @click="selectChar(u.c); browseMonth = u.c.birthdayMonth"
+          @click="selectChar(u.c); goMonth(u.c.birthdayMonth)"
         >
           <img v-if="avatarOf(u.c)" :src="avatarOf(u.c)" :alt="u.c.name" />
           <span class="bn">{{ u.c.name }}</span>
@@ -347,16 +346,12 @@ function avatarOf(c) {
 
     <div class="layout">
       <div class="main">
-        <section class="panel gs-panel">
+        <section class="panel gs-panel query-panel">
           <header class="phead">
             <h2>同日查询</h2>
             <div class="qbar">
-              <select v-model.number="qMonth" aria-label="月份">
-                <option v-for="m in MONTHS" :key="m" :value="m">{{ m }} 月</option>
-              </select>
-              <select v-model.number="qDay" aria-label="日期">
-                <option v-for="d in dayOptions" :key="d" :value="d">{{ d }} 日</option>
-              </select>
+              <StyledSelect v-model="qMonth" :options="MONTH_OPTIONS" label="月份" hide-label />
+              <StyledSelect v-model="qDay" :options="dayOptions" label="日期" hide-label />
               <button type="button" class="mini-btn" @click="qMonth = todayM; qDay = todayD">
                 今天
               </button>
@@ -410,17 +405,15 @@ function avatarOf(c) {
             class="cal-carousel"
             role="group"
             aria-roledescription="轮播"
-            aria-label="按月浏览日历：横向滚动或方向键切换月份"
+            aria-label="按月浏览日历，使用滚轮或左右方向键切换月份"
             tabindex="0"
             @wheel="onWheel"
             @keydown="onTrackKey"
           >
             <div
-              ref="trackRef"
               class="cal-track"
               :class="{ jumping }"
               :style="trackStyle"
-              @transitionend="onTrackTransitionEnd"
             >
               <div
                 v-for="(m, i) in SLIDES"
@@ -434,6 +427,8 @@ function avatarOf(c) {
                   :days="monthData[m].days"
                   :by-day="monthData[m].byDay"
                   :today="{ month: todayM, day: todayD }"
+                  :active-id="selected?.id"
+                  :preferred-by-day="preferredAvatars[m]"
                   @pick="pickBirthday"
                 />
               </div>
@@ -456,8 +451,9 @@ function avatarOf(c) {
 
       <aside class="side">
         <div class="panel gs-panel cardpanel">
-          <header class="phead">
-            <h2>生日卡</h2>
+          <header class="phead card-head">
+            <h2 ref="cardHeading" tabindex="-1">{{ selected ? `${selected.name} · 生日卡` : '生日卡' }}</h2>
+            <RouterLink v-if="selected" class="mini-btn" :to="`/c/${selected.id}`">角色详情</RouterLink>
           </header>
 
           <BirthdayCardCanvas
@@ -469,13 +465,7 @@ function avatarOf(c) {
           />
           <p v-else class="none">先在上面选择一个角色。</p>
 
-          <label class="fld">
-            <span>模板</span>
-            <select v-model="template">
-              <option value="portrait">竖版 4:5 · 1080×1350</option>
-              <option value="square">方版 1:1 · 1080×1080</option>
-            </select>
-          </label>
+          <StyledSelect v-model="template" :options="CARD_TEMPLATES" label="模板" />
 
           <label class="fld">
             <span>祝贺语（最多 40 字）</span>
@@ -499,11 +489,16 @@ function avatarOf(c) {
           <button type="button" class="gs-btn" autofocus @click="closePicker">关闭</button>
         </header>
         <div class="picker-roles">
-          <button v-for="c in pickedDate.characters" :key="c.id" type="button" class="banner-item picker-role" @click="goCharacter(c)">
-            <img v-if="avatarOf(c)" :src="avatarOf(c)" alt="" />
-            <span class="bn">{{ c.name }}</span>
-            <span v-if="c.title" class="bd">{{ c.title }}</span>
-          </button>
+          <div v-for="c in pickedDate.characters" :key="c.id" class="picker-role">
+            <button type="button" class="banner-item picker-character" :aria-label="`查看${c.name}详情`" @click="goCharacter(c)">
+              <img v-if="avatarOf(c)" :src="avatarOf(c)" alt="" />
+              <span class="bn">{{ c.name }}</span>
+              <span class="bd">详情</span>
+            </button>
+            <button type="button" class="gs-btn primary picker-card" :aria-label="`制作${c.name}的生日卡`" @click="makeBirthdayCard(c)">
+              制作生日卡
+            </button>
+          </div>
         </div>
       </template>
     </dialog>
@@ -534,8 +529,22 @@ function avatarOf(c) {
 }
 
 .picker-role {
-  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.picker-character {
+  padding: 6px 12px;
   text-align: left;
+}
+
+.picker-character .bd {
+  margin-left: auto;
+}
+
+.picker-card {
+  white-space: nowrap;
 }
 
 .banner {
@@ -597,7 +606,7 @@ function avatarOf(c) {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 372px;
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 372px);
   gap: 16px;
   align-items: start;
 }
@@ -626,27 +635,21 @@ function avatarOf(c) {
   letter-spacing: 0.08em;
 }
 
+.query-panel {
+  /* 下拉菜单需要盖过下方独立堆叠的月历面板。 */
+  z-index: 1;
+}
+
 .qbar {
   margin-left: auto;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
-.qbar select,
-.fld select {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--gs-line);
-  background: rgba(6, 20, 32, 0.6);
-  color: var(--gs-ink);
-  font-size: 13px;
-  outline: none;
-}
-
-.qbar option,
-.fld option {
-  background: #10293d;
+.qbar .styled-select {
+  width: 96px;
 }
 
 .mini-btn {
@@ -760,7 +763,7 @@ function avatarOf(c) {
 .cal-track {
   display: flex;
   will-change: transform;
-  transition: transform 0.42s cubic-bezier(0.22, 0.8, 0.25, 1);
+  transition: transform var(--slide-duration) cubic-bezier(0.22, 0.8, 0.25, 1);
 }
 
 /* 克隆位归位时禁用过渡，实现无缝循环 */
@@ -891,6 +894,14 @@ function avatarOf(c) {
   gap: 10px;
 }
 
+.card-head {
+  justify-content: space-between;
+}
+
+.card-head h2 {
+  scroll-margin-top: 84px;
+}
+
 .fld {
   display: flex;
   flex-direction: column;
@@ -933,7 +944,7 @@ function avatarOf(c) {
   cursor: default;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1000px) {
   .layout {
     grid-template-columns: 1fr;
   }

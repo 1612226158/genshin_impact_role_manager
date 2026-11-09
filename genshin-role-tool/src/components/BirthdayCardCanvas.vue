@@ -21,6 +21,7 @@ const props = defineProps({
 const canvasRef = ref(null)
 const busy = ref(false)
 const failed = ref(false)
+let drawVersion = 0
 
 const SIZE = {
   portrait: { w: 1080, h: 1350 },
@@ -43,13 +44,15 @@ function pickArt(c) {
 
 async function draw() {
   const canvas = canvasRef.value
-  if (!canvas || !props.character) return
+  const { character, greeting } = props
+  if (!canvas || !character) return
+  const version = ++drawVersion
   const { w, h } = dims.value
   canvas.width = w
   canvas.height = h
 
   const ctx = canvas.getContext('2d')
-  const el = elementColor(props.character.element)
+  const el = elementColor(character.element)
   const isSquare = props.template === 'square'
 
   busy.value = true
@@ -82,7 +85,7 @@ async function draw() {
   ctx.strokeRect(inset + 9, inset + 9, w - (inset + 9) * 2, h - (inset + 9) * 2)
 
   // ---- 顶部文字 ----
-  const c = props.character
+  const c = character
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
 
@@ -90,15 +93,10 @@ async function draw() {
   const iconPath = elementIcon(c.element)
   const iconSize = isSquare ? 58 : 66
   const iconY = isSquare ? 62 : 78
-  let drewIcon = false
   if (iconPath) {
-    try {
-      const icon = await loadImage(assetUrl(iconPath))
-      ctx.drawImage(icon, w / 2 - iconSize / 2, iconY - iconSize / 2, iconSize, iconSize)
-      drewIcon = true
-    } catch {
-      drewIcon = false
-    }
+    const icon = await loadImage(assetUrl(iconPath)).catch(() => null)
+    if (version !== drawVersion) return
+    if (icon) ctx.drawImage(icon, w / 2 - iconSize / 2, iconY - iconSize / 2, iconSize, iconSize)
   }
 
   // 有图标时布局固定预留图标空间，避免图标加载失败导致文字跳动
@@ -134,23 +132,24 @@ async function draw() {
 
   // 祝贺语
   const greetY = nameY + (isSquare ? 88 : 104)
-  if (props.greeting) {
+  if (greeting) {
     ctx.fillStyle = 'rgba(58, 50, 40, 0.92)'
     ctx.font = '400 24px "Noto Serif SC", "Songti SC", serif'
-    const lines = wrapText(ctx, props.greeting, w - 260).slice(0, 2)
+    const lines = wrapText(ctx, greeting, w - 260).slice(0, 2)
     lines.forEach((line, i) => {
       ctx.fillText(line, w / 2, greetY + i * 36)
     })
   }
 
   // ---- 角色立绘：装进带金边的圆角画框 ----
-  const artTop = greetY + (props.greeting ? 64 : 40)
+  const artTop = greetY + (greeting ? 64 : 40)
   const artBottom = h - (isSquare ? 92 : 112)
   const src = pickArt(c)
 
   if (src) {
     try {
       const img = await loadImage(src)
+      if (version !== drawVersion) return
       const maxH = artBottom - artTop
       const maxW = w - 200
       // 按原图比例取框，避免拉伸或留白
@@ -183,6 +182,7 @@ async function draw() {
       ctx.stroke()
       ctx.restore()
     } catch (err) {
+      if (version !== drawVersion) return
       console.warn('[生日卡] 立绘绘制失败', err)
       failed.value = true
       drawNoArt(ctx, w, artTop, artBottom)
