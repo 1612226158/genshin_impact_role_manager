@@ -16,6 +16,31 @@ export const useCharacterStore = defineStore('character', () => {
   const overrides = usePersist(KEYS.overrides, {})
   const customs = usePersist(KEYS.customs, [])
 
+  /**
+   * 故事正文按需加载：stories.json 约 1.78MB（占原数据 96%），
+   * 不参与首屏，只在打开「背景故事」或编辑该角色时拉取，拉过即缓存。
+   */
+  const storyMap = reactive({})
+  const storyPending = reactive({})
+  let storiesPromise = null
+
+  function ensureStory(id) {
+    const key = String(id)
+    if (storyMap[key]) return Promise.resolve(storyMap[key])
+    if (storyPending[key]) return storyPending[key]
+    storiesPromise ||= import('@/data/stories.json').then((m) => m.default || m)
+    storyPending[key] = storiesPromise
+      .then((map) => {
+        if (map[key]) storyMap[key] = map[key]
+        return storyMap[key] || null
+      })
+      .finally(() => {
+        delete storyPending[key]
+      })
+    return storyPending[key]
+  }
+  const hasStory = (id) => Boolean(storyMap[String(id)])
+
   /* ---------------- 合并视图 ---------------- */
 
   const all = computed(() => {
@@ -25,7 +50,9 @@ export const useCharacterStore = defineStore('character', () => {
     for (const c of BASE_LIST) {
       const patch = ov[String(c.id)]
       if (patch?.__deleted) continue
-      out.push(patch ? mergeCharacter(c, patch) : c)
+      // 正文已加载则视为基础数据的一部分，后续覆盖层仍按字段合并
+      const base = storyMap[String(c.id)] ? { ...c, story: storyMap[String(c.id)] } : c
+      out.push(patch ? mergeCharacter(base, patch) : base)
     }
 
     for (const c of customs.value || []) {
@@ -400,6 +427,8 @@ export const useCharacterStore = defineStore('character', () => {
     get,
     getDefault,
     isCustom,
+    ensureStory,
+    hasStory,
     stats,
     nationOptions,
     elementOptions,

@@ -1,10 +1,11 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ElementBadge from '@/components/ElementBadge.vue'
 import CharacterRail from '@/components/CharacterRail.vue'
 import StoryReader from '@/components/StoryReader.vue'
 import FlipArtwork from '@/components/FlipArtwork.vue'
+import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
 import { useAlbumStore } from '@/stores/album'
@@ -23,6 +24,22 @@ const tab = ref('stats')
 
 const character = computed(() => store.get(route.params.id))
 
+/* 故事正文按需加载（占原数据 96%，不参与首屏） */
+const storyLoading = ref(false)
+async function loadStoryIfNeeded() {
+  const id = route.params.id
+  if (!id || store.hasStory(id)) return
+  storyLoading.value = true
+  try {
+    await store.ensureStory(id)
+  } finally {
+    storyLoading.value = false
+  }
+}
+
+/* 海报预加载：骨架 → 图片就绪再显示，避免空白与跳版 */
+const posterReady = ref(false)
+
 const paintings = computed(() => character.value?.images?.paintings || [])
 const activePainting = ref(0)
 
@@ -31,12 +48,37 @@ watch(() => route.params.id, () => {
   tab.value = 'stats'
 })
 
-watch(tab, () => {
+watch(tab, (value) => {
+  if (value === 'story') loadStoryIfNeeded()
   const behavior = document.documentElement.classList.contains('no-motion') ? 'instant' : 'smooth'
   window.scrollTo({ top: 0, behavior })
 })
 
 const paintingSrc = computed(() => assetUrl(paintings.value[activePainting.value]?.file || ''))
+
+watch(
+  paintingSrc,
+  (src) => {
+    if (!src) {
+      posterReady.value = true
+      return
+    }
+    posterReady.value = false
+    const img = new Image()
+    img.decoding = 'async'
+    const done = () => {
+      posterReady.value = true
+    }
+    img.onload = done
+    img.onerror = done
+    img.src = src
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  if (tab.value === 'story') loadStoryIfNeeded()
+})
 
 const nationIconSrc = computed(() => {
   const p = nationIcon(character.value?.nation)
@@ -144,6 +186,10 @@ function toggleOne(p) {
       <!-- 中央立绘 -->
       <div class="stage">
         <div class="poster" :class="{ 'no-art': !paintingSrc }">
+          <!-- 图片就绪前的骨架，占位尺寸与最终海报一致，避免跳版 -->
+          <div v-if="paintingSrc && !posterReady" class="poster-skel" aria-hidden="true">
+            <SkeletonBlock w="100%" h="100%" radius="10px" />
+          </div>
           <Transition name="posterfade" mode="out-in">
             <FlipArtwork
               v-if="paintingSrc"
@@ -218,8 +264,17 @@ function toggleOne(p) {
         </template>
 
         <template v-else-if="tab === 'story'">
+          <!-- 正文按需加载：加载期间显示骨架，避免空白与布局跳动 -->
+          <div v-if="storyLoading" class="story-skel" aria-busy="true" aria-label="正在加载背景故事">
+            <SkeletonBlock w="100%" h="13px" />
+            <SkeletonBlock w="96%" h="13px" />
+            <SkeletonBlock w="88%" h="13px" />
+            <SkeletonBlock w="72%" h="13px" />
+            <SkeletonBlock w="100%" h="13px" />
+            <SkeletonBlock w="64%" h="13px" />
+          </div>
           <!-- 资料阅读器：左侧分节目录 + 右侧连续正文（对齐游戏内资料页） -->
-          <StoryReader v-if="storySections.length" :key="character.id" :sections="storySections" />
+          <StoryReader v-else-if="storySections.length" :key="character.id" :sections="storySections" />
           <p v-else class="empty-story">官方未提供背景故事文本。</p>
         </template>
 
@@ -431,6 +486,21 @@ function toggleOne(p) {
   max-height: calc(100vh - 210px);
   display: flex;
   justify-content: center;
+}
+
+/* 海报骨架：绝对定位覆盖在 .poster 上，尺寸随容器，不改变布局 */
+.poster-skel {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* 故事正文骨架：与 StoryReader 首屏行高接近，减少加载完成后的位移 */
+.story-skel {
+  display: grid;
+  gap: 10px;
+  padding: 6px 0 14px;
+  max-width: 62ch;
 }
 
 .poster img {

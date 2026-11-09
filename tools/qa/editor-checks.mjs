@@ -163,7 +163,14 @@ try {
       options.find((option) => option.querySelector('.opt-main').textContent.trim() === value).click()
     }, field(name), label)
   }
-  const save = () => page.evaluate(() => document.querySelector('dialog[open] .head-ops .primary').click())
+  // 编辑器现在会在故事正文就绪前禁用保存，点击前必须等按钮可用
+  const save = async () => {
+    await page.waitForFunction(() => {
+      const b = document.querySelector('dialog[open] .head-ops .primary')
+      return b && !b.disabled
+    })
+    return page.evaluate(() => document.querySelector('dialog[open] .head-ops .primary').click())
+  }
   await choose('月份', '1 月')
   await choose('日期', '31 日')
   await choose('月份', '2 月')

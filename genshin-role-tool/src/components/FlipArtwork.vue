@@ -31,7 +31,7 @@ onBeforeUnmount(() => observer?.disconnect())
   <button type="button" class="flip-artwork" :class="{ flipped }" :disabled="!back" :aria-pressed="flipped"
     :aria-label="`${name}：${flipped ? '点击翻回海报' : '点击翻至高清头像'}`" @click="flipped = !flipped">
     <span ref="inner" class="flip-inner">
-      <span class="flip-face front" :aria-hidden="flipped"><img :src="front" :style="fit(frontSize)" :alt="`${name} 海报`" draggable="false" @load="loaded($event, 'front')" /></span>
+      <span class="flip-face front" :aria-hidden="flipped"><img :src="front" :style="fit(frontSize)" :alt="`${name} 海报`" draggable="false" fetchpriority="high" decoding="async" @load="loaded($event, 'front')" /></span>
       <span class="flip-face back-face" :aria-hidden="!flipped"><img :src="back || front" :style="fit(backSize)" :alt="`${name} 高清头像`" draggable="false" @load="loaded($event, 'back')" /></span>
     </span>
     <span v-if="back" class="flip-hint">{{ flipped ? '点击翻回海报' : '点击翻至高清头像' }} <span aria-hidden="true">⟳</span></span>

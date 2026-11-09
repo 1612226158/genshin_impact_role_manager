@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { assetUrl } from '@/utils/asset'
 import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ElementBadge from '@/components/ElementBadge.vue'
 import StyledSelect from '@/components/StyledSelect.vue'
+import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useCharacterStore } from '@/stores/character'
 import { useToastStore } from '@/stores/toast'
 import { NATIONS, WEAPONS, elementIcon, nationIcon } from '@/utils/element'
@@ -43,6 +44,8 @@ const emptyCharacter = () => ({
 const form = reactive(emptyCharacter())
 const origin = ref(null)
 const dirty = ref(false)
+/* 故事正文按需加载期间为 false：此时表单未填充，禁止保存以免覆盖原正文 */
+const formReady = ref(false)
 const errors = reactive({})
 
 
@@ -120,13 +123,24 @@ const previewPaintings = computed(() => {
   if (!paths.length && form.images.avatar_hd) paths.push(form.images.avatar_hd)
   return paths.slice(0, 3)
 })
-onMounted(() => {
-  loadIntoForm()
+onMounted(async () => {
   returnFocus = props.returnFocus || document.activeElement
   dialog.value.showModal()
   lockScroll()
   locked = true
-  dialog.value.querySelector('input')?.focus({ preventScroll: true })
+  // 故事正文已从主数据拆出（约 1.78MB），编辑前必须等它到达，
+  // 否则保存会用空正文覆盖角色故事
+  if (!isNew.value) {
+    try {
+      await store.ensureStory(props.characterId)
+    } catch {
+      /* 拉取失败时保留原状，不写回空正文 */
+    }
+  }
+  loadIntoForm()
+  formReady.value = true
+  await nextTick()
+  dialog.value?.querySelector('input')?.focus({ preventScroll: true })
 })
 onBeforeUnmount(() => {
   removeGuard()
@@ -189,6 +203,8 @@ function payload() {
 }
 
 function save() {
+  // 正文尚未载入时表单是空的，保存会覆盖原有故事
+  if (!formReady.value) return
   if (!validate()) {
     toast.warn('请先修正表单中的问题')
     return
@@ -294,11 +310,20 @@ const isEdited = computed(() => store.editedIds.has(String(props.characterId)))
       <div class="head-ops">
         <span v-if="isEdited" class="badge">已修改</span>
         <button type="button" class="gs-btn" @click="cancel">取消</button>
-        <button type="button" class="gs-btn primary" @click="save">保存</button>
+        <button type="button" class="gs-btn primary" :disabled="!formReady" @click="save">
+          {{ formReady ? '保存' : '载入中…' }}
+        </button>
       </div>
     </header>
 
     <div class="editor-layout">
+      <!-- 正文加载骨架：避免表单先以空值呈现、造成误编辑 -->
+      <div v-if="!formReady" class="editor-skel" aria-busy="true" aria-label="正在载入角色资料">
+        <SkeletonBlock w="42%" h="18px" />
+        <SkeletonBlock w="100%" h="38px" radius="8px" />
+        <SkeletonBlock w="100%" h="38px" radius="8px" />
+        <SkeletonBlock w="72%" h="38px" radius="8px" />
+      </div>
       <aside class="editor-art" aria-label="角色立绘预览">
         <div class="painting-stack">
           <img v-for="(src, i) in previewPaintings" :key="src" :src="assetUrl(src)" :alt="`${form.name || '新角色'}立绘预览`" :style="{ '--layer': i }" draggable="false" />
@@ -692,6 +717,15 @@ textarea {
 .add-row .gs-btn {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* 载入骨架占右列，左侧立绘预览保持可见（与 .editor-layout 的两列对应） */
+.editor-skel {
+  grid-column: 2;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 24px 22px;
 }
 
 .tip {
