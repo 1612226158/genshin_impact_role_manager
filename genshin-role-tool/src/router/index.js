@@ -39,6 +39,12 @@ const routes = [  {
     meta: { nav: 'album', title: '相册' },
   },
   {
+    path: '/compare',
+    name: 'compare',
+    component: () => import('@/views/CompareView.vue'),
+    meta: { nav: 'compare', title: '角色对比' },
+  },
+  {
     path: '/history',
     name: 'history',
     component: () => import('@/views/HistoryView.vue'),

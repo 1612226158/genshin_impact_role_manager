@@ -4,10 +4,16 @@ import { computed } from 'vue'
 
 const route = useRoute()
 
-const navs = [
+/* 主航区：常用页面 */
+const primaryNavs = [
   { to: '/', label: '角色库', key: 'library' },
   { to: '/birthday', label: '生日', key: 'birthday' },
   { to: '/album', label: '相册', key: 'album' },
+  { to: '/compare', label: '对比', key: 'compare' },
+]
+
+/* 右侧次航区：低频页面（记录 / 设置） */
+const secondaryNavs = [
   { to: '/history', label: '记录', key: 'history' },
   { to: '/settings', label: '设置', key: 'settings' },
 ]
@@ -28,7 +34,7 @@ const activeKey = computed(() => route.meta?.nav || '')
 
       <nav class="nav" aria-label="主导航">
         <RouterLink
-          v-for="n in navs"
+          v-for="n in primaryNavs"
           :key="n.key"
           :to="n.to"
           class="nav-item"
@@ -41,6 +47,18 @@ const activeKey = computed(() => route.meta?.nav || '')
       <div class="tail">
         <slot name="tail" />
       </div>
+
+      <nav class="nav-sub" aria-label="次级导航">
+        <RouterLink
+          v-for="n in secondaryNavs"
+          :key="n.key"
+          :to="n.to"
+          class="nav-item sub-item"
+          :class="{ 'is-active': activeKey === n.key }"
+        >
+          {{ n.label }}
+        </RouterLink>
+      </nav>
     </div>
   </header>
 </template>
@@ -145,6 +163,27 @@ const activeKey = computed(() => route.meta?.nav || '')
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* 右侧次级导航：沿用主导航的选中样式（金色文字 + 底部渐变下划线），
+   仅字号与左右内距略小，视觉权重略低 */
+.nav-sub {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: -12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--gs-line);
+}
+
+.sub-item {
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.sub-item.is-active::after {
+  left: 10px;
+  right: 10px;
 }
 
 @media (max-width: 900px) {
