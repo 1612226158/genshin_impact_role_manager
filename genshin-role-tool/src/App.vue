@@ -1,9 +1,10 @@
 <script setup>
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, provide, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Starfield from '@/components/Starfield.vue'
 import TopBar from '@/components/TopBar.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import CompareQueue from '@/components/CompareQueue.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useCharacterStore } from '@/stores/character'
 import { useEditorStore } from '@/stores/editor'
@@ -15,6 +16,8 @@ const settings = useSettingsStore()
 const route = useRoute()
 const characters = useCharacterStore()
 const sceneElement = computed(() => characters.get(route.params.id)?.element || '')
+const compareScene = ref(null)
+provide('compareScene', compareScene)
 
 // 诊断开关：?nostarapp=1 不渲染星空组件（隔离 ResizeObserver + fixed canvas）
 //           ?noview=1  不渲染路由视图与页脚（只留顶栏，隔离各页面内容）
@@ -23,7 +26,8 @@ const noView = new URLSearchParams(location.search).has('noview')
 </script>
 
 <template>
-  <Starfield v-if="!noStarApp" :element="sceneElement" :motion="settings.settings.motion !== 'off'" />
+  <Starfield v-if="!noStarApp" :element="sceneElement" :pair="route.name === 'compare' ? compareScene : null"
+    :motion="settings.settings.motion !== 'off'" />
   <TopBar />
   <main v-if="!noView">
     <RouterView v-slot="{ Component }">
@@ -49,6 +53,7 @@ const noView = new URLSearchParams(location.search).has('noview')
       手绘并无偿分享（米游社）
     </p>
   </footer>
+  <CompareQueue v-if="!noView" />
   <ToastHost />
   <CharacterEditorModal v-if="editor.characterId" :key="editor.characterId" :character-id="editor.characterId" :return-focus="editor.opener" @close="editor.close" />
 </template>

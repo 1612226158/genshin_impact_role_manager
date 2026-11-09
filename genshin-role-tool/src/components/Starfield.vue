@@ -2,8 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { elementColor } from '@/utils/element'
 
-const props = defineProps({ element: { type: String, default: '' }, motion: { type: Boolean, default: true } })
+const props = defineProps({
+  element: { type: String, default: '' },
+  motion: { type: Boolean, default: true },
+  pair: { type: Array, default: null },
+})
 const tint = computed(() => props.element ? elementColor(props.element) : '#417a9b')
+const pairTints = computed(() => props.pair?.map((element) => element ? elementColor(element) : '#417a9b'))
+const skyKey = computed(() => props.pair ? `compare:${props.pair.join('|')}` : props.element)
 const canvasRef = ref(null)
 const running = ref(false)
 let ctx, observer, frame = 0, last = 0, clock = 0
@@ -36,7 +42,8 @@ function draw() {
   for (const s of stars) {
     const x = s.x + (s.drift ? Math.sin(clock * .2 + s.phase) * 8 : 0)
     const y = s.drift ? ((s.y - clock * s.speed) % height + height) % height : s.y
-    ctx.fillStyle = s.drift ? tint.value : '#e2f0ff'
+    const driftTint = pairTints.value?.[x < width / 2 ? 0 : 1] ?? tint.value
+    ctx.fillStyle = s.drift ? driftTint : '#e2f0ff'
     ctx.globalAlpha = s.alpha * (.8 + Math.sin(clock * .65 + s.phase) * .2)
     ctx.beginPath()
     if (s.sparkle) {
@@ -84,7 +91,7 @@ function sync() {
   }
 }
 watch(() => props.motion, sync)
-watch(tint, draw)
+watch([tint, pairTints], draw)
 onMounted(() => {
   ctx = canvasRef.value.getContext('2d')
   observer = new ResizeObserver(resize)
@@ -105,7 +112,8 @@ onBeforeUnmount(() => {
   <div class="starfield" :class="{ paused: !running }" :data-element="element || 'neutral'" :data-running="running" aria-hidden="true">
     <div class="bg-grad" />
     <Transition name="sky">
-      <div :key="element" class="element-sky" :style="{ '--scene-color': tint }" />
+      <div :key="skyKey" class="element-sky" :class="{ 'paired-sky': pairTints }"
+        :style="{ '--scene-color': tint, '--sky-left': pairTints?.[0], '--sky-right': pairTints?.[1] }" />
     </Transition>
     <canvas ref="canvasRef" class="bg-stars" />
     <div class="horizon" />
@@ -121,6 +129,13 @@ onBeforeUnmount(() => {
     radial-gradient(ellipse 80% 42% at 42% 51%, color-mix(in srgb, var(--scene-color) 30%, transparent), transparent 80%),
     radial-gradient(ellipse 65% 85% at 18% 22%, color-mix(in srgb, var(--scene-color) 19%, transparent), transparent 85%),
     linear-gradient(180deg, transparent, color-mix(in srgb, var(--scene-color) 9%, transparent) 62%, transparent);
+}
+.paired-sky {
+  background:
+    radial-gradient(ellipse 68% 74% at 0% 37%, color-mix(in srgb, var(--sky-left) 34%, transparent), transparent 84%),
+    radial-gradient(ellipse 68% 74% at 100% 37%, color-mix(in srgb, var(--sky-right) 34%, transparent), transparent 84%),
+    linear-gradient(90deg, color-mix(in srgb, var(--sky-left) 12%, transparent), transparent 50%,
+      color-mix(in srgb, var(--sky-right) 12%, transparent));
 }
 .bg-stars { width: 100%; height: 100%; }
 .horizon {

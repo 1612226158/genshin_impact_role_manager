@@ -63,7 +63,7 @@ try {
   await page.click('.tabs button:first-child')
   await sleep(700)
   const edit = async () => {
-    await page.evaluate(() => [...document.querySelectorAll('.actions button')].find(b => b.textContent.trim() === '编辑').click())
+    await page.evaluate(() => document.querySelector('.detail-edit').click())
     await page.waitForFunction(() => Boolean(document.querySelector('dialog[open]')))
   }
   await edit()

@@ -7,6 +7,7 @@ import StoryReader from '@/components/StoryReader.vue'
 import FlipArtwork from '@/components/FlipArtwork.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useEditorStore } from '@/stores/editor'
+import { useCompareQueueStore } from '@/stores/compareQueue'
 import { useCharacterStore } from '@/stores/character'
 import { useAlbumStore } from '@/stores/album'
 import { useToastStore } from '@/stores/toast'
@@ -19,10 +20,33 @@ const store = useCharacterStore()
 const album = useAlbumStore()
 const toast = useToastStore()
 const editor = useEditorStore()
+const compareQueue = useCompareQueueStore()
 
 const tab = ref('stats')
 
 const character = computed(() => store.get(route.params.id))
+
+async function toggleCompare() {
+  const id = character.value?.id
+  if (!id || compareQueue.full) return
+  if (compareQueue.has(id)) {
+    compareQueue.remove(id)
+    return
+  }
+  if (!compareQueue.add(id) || !compareQueue.full) return
+
+  const [left, right] = compareQueue.entries
+  try {
+    const failure = await router.push({ name: 'compare', query: { a: left.id, b: right.id } })
+    if (!failure) {
+      compareQueue.clear()
+      return
+    }
+  } catch {
+    toast.err('未能打开对比页，请重试')
+  }
+  compareQueue.remove(id)
+}
 
 /* 故事正文按需加载（占原数据 96%，不参与首屏） */
 const storyLoading = ref(false)
@@ -223,6 +247,7 @@ function toggleOne(p) {
         <div class="name-row">
           <h1>{{ character.name }}</h1>
           <span v-if="character.variant" class="variant">{{ character.variant }}</span>
+          <button type="button" class="gs-btn detail-edit" @click="editor.open(character.id, $event.currentTarget)">编辑</button>
         </div>
         <p class="title">{{ character.title || '—' }}</p>
         <p class="stars" :aria-label="`${character.star || 0} 星`">
@@ -232,11 +257,13 @@ function toggleOne(p) {
         <div class="rule"></div>
 
         <div class="actions">
-          <button type="button" class="gs-btn" :class="{ primary: !collected }" @click="toggleCollect">
-            {{ collected ? '已加入相册 ✓' : '加入相册' }}
+          <button type="button" class="gs-btn album-action" :class="{ primary: !collected }" @click="toggleCollect">
+            <span>{{ collected ? '已加入相册' : '加入相册' }}</span>
+            <span v-if="collected" class="album-check" aria-hidden="true">✓</span>
           </button>
-          <button type="button" class="gs-btn" @click="editor.open(character.id, $event.currentTarget)">
-            编辑
+          <button type="button" class="gs-btn compare-add" :disabled="compareQueue.full" :aria-pressed="compareQueue.has(character.id)"
+            :title="compareQueue.has(character.id) ? '再次点击取消对比' : undefined" @click="toggleCompare">
+            {{ compareQueue.has(character.id) ? '已加入对比' : '加入对比' }}
           </button>
         </div>
 
@@ -572,6 +599,17 @@ function toggleOne(p) {
   gap: 8px;
 }
 
+.detail-edit {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-left: auto;
+  border-color: var(--gs-line);
+  padding: 4px 10px;
+  color: var(--gs-ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* 「属性」页签：右栏顶线与左侧「属性」按钮、中央海报对齐
    （故事/相册页签走 .body.wide 的紧凑 8px 头部，不在此列） */
 .body:not(.wide) .side {
@@ -582,6 +620,7 @@ function toggleOne(p) {
   font-size: 30px;
   letter-spacing: 0.06em;
   color: var(--gs-ink);
+  overflow-wrap: anywhere;
 }
 
 .variant {
@@ -795,7 +834,8 @@ function toggleOne(p) {
 
 .actions {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0 0 18px;
 }
 
@@ -803,13 +843,22 @@ function toggleOne(p) {
   margin-bottom: 22px;
 }
 
-.body.wide .actions .gs-btn {
-  flex: 0 0 auto;
-  min-width: 140px;
+.actions .gs-btn {
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
 }
 
-.actions .gs-btn {
-  flex: 1;
+.compare-add:disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
+.compare-add[aria-pressed='true'] {
+  border-color: var(--gs-gold-deep);
+  color: var(--gs-gold-hi);
 }
 
 .missing {

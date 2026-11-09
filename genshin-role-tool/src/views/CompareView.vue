@@ -1,13 +1,12 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import CharacterPicker from '@/components/CharacterPicker.vue'
 import ElementBadge from '@/components/ElementBadge.vue'
-import ArtStack from '@/components/ArtStack.vue'
 import { useCharacterStore } from '@/stores/character'
 import { assetUrl } from '@/utils/asset'
-import { nationIcon } from '@/utils/element'
+import { elementColor, elementIcon, nationIcon } from '@/utils/element'
 
 const store = useCharacterStore()
 const route = useRoute()
@@ -30,8 +29,26 @@ const idB = ref(initialId('b', 1))
 const pick = (id) => store.get(id)
 const a = computed(() => pick(idA.value))
 const b = computed(() => pick(idB.value))
+const compareScene = inject('compareScene')
+watch([() => a.value?.element, () => b.value?.element], (elements) => {
+  compareScene.value = elements
+}, { immediate: true })
+onBeforeUnmount(() => { compareScene.value = null })
+
+const CV_LANGUAGES = [
+  { key: '中', label: '中文 CV' },
+  { key: '日', label: '日文 CV' },
+  { key: '英', label: '英文 CV' },
+  { key: '韩', label: '韩文 CV' },
+]
+const cvIndex = ref(0)
+
+function cycleCv() {
+  cvIndex.value = (cvIndex.value + 1) % CV_LANGUAGES.length
+}
 
 const rows = computed(() => {
+  const language = CV_LANGUAGES[cvIndex.value]
   const list = [
     { key: 'star', label: '星级', get: (c) => (c?.star ? `${'★'.repeat(Math.min(c.star, 5))}` : '—') },
     { key: 'element', label: '元素', get: (c) => c?.element || '无', badge: true },
@@ -42,10 +59,7 @@ const rows = computed(() => {
     { key: 'constellation', label: '命之座', get: (c) => c?.constellation || '—' },
     { key: 'role', label: '定位', get: (c) => c?.role || '—' },
     { key: 'title', label: '称号', get: (c) => c?.title || '—' },
-    { key: 'cv-cn', label: '中文 CV', get: (c) => c?.cv?.['中'] || '—' },
-    { key: 'cv-jp', label: '日文 CV', get: (c) => c?.cv?.['日'] || '—' },
-    { key: 'cv-en', label: '英文 CV', get: (c) => c?.cv?.['英'] || '—' },
-    { key: 'cv-kr', label: '韩文 CV', get: (c) => c?.cv?.['韩'] || '—' },
+    { key: 'cv', label: language.label, get: (c) => c?.cv?.[language.key] || '—' },
   ]
   return list.map((r) => {
     const va = r.get(a.value)
@@ -55,11 +69,15 @@ const rows = computed(() => {
 })
 
 const diffCount = computed(() => rows.value.filter((r) => r.diff).length)
+const swapping = ref(false)
 
-function swap() {
+async function swap() {
+  swapping.value = true
   const t = idA.value
   idA.value = idB.value
   idB.value = t
+  await nextTick()
+  swapping.value = false
 }
 
 /* 选择写入 URL，便于分享与回退 */
@@ -72,16 +90,40 @@ watch([idA, idB], () => {
   router.replace({ path: '/compare', query })
 })
 
-const avatarOf = (c) => assetUrl(c?.images?.avatar_hd || c?.images?.avatar || '')
-/** 立绘：最多取两张参与叠层，保留 editor-art 的卡片堆叠观感 */
-const paintingsOf = (c) => (c?.images?.paintings || []).slice(0, 2)
+const sides = computed(() => [
+  { key: 'a', character: a.value },
+  { key: 'b', character: b.value },
+])
+
+function posterOf(character) {
+  const images = character?.images
+  return assetUrl(images?.paintings?.find((painting) => painting.file)?.file || images?.avatar_hd || images?.avatar)
+}
+
+function pulsePoster(event) {
+  if (document.documentElement.classList.contains('no-motion')) return
+  const image = event.currentTarget.querySelector('img')
+  const flare = event.currentTarget.querySelector('.poster-flare')
+  for (const part of [image, flare]) {
+    part.getAnimations().forEach((animation) => animation.cancel())
+  }
+  image.animate([
+    { transform: 'scale(1)', filter: 'brightness(1)' },
+    { transform: 'scale(1.045)', filter: 'brightness(1.16)', offset: 0.32 },
+    { transform: 'scale(1)', filter: 'brightness(1)' },
+  ], { duration: 420, easing: 'ease-out' })
+  flare.animate([
+    { opacity: 0, transform: 'scale(.96)' },
+    { opacity: 0.85, offset: 0.24 },
+    { opacity: 0, transform: 'scale(1.17)' },
+  ], { duration: 560, easing: 'ease-out' })
+}
 </script>
 
 <template>
   <div class="page">
     <PageHead eyebrow="Compare" title="角色对比" :desc="`并排比较两位角色的属性、命座与声优；当前有 ${diffCount} 项存在差异`">
       <button type="button" class="gs-btn" :disabled="!a || !b" @click="swap">交换左右</button>
-      <RouterLink v-if="a" class="gs-btn" :to="`/c/${a.id}`">查看 {{ a.name }} 详情</RouterLink>
     </PageHead>
 
     <section class="pickers">
@@ -95,59 +137,71 @@ const paintingsOf = (c) => (c?.images?.paintings || []).slice(0, 2)
       </div>
     </section>
 
-    <section v-if="a || b" class="panel gs-panel">
-      <div class="cmp" :class="{ single: !a || !b }">
-        <!-- 立绘区：一左一右，复用 editor-art 的叠加卡片样式 -->
-        <div class="cmp-posters">
-          <span class="col-label" aria-hidden="true"></span>
-          <div v-for="(c, i) in [a, b]" :key="`poster-${i}`" class="poster-cell">
-            <template v-if="c">
-              <ArtStack :srcs="paintingsOf(c)" :alt="`${c.name} 立绘`" height="320px" placeholder="暂无立绘" />
-              <div class="col-meta">
-                <RouterLink class="col-name" :to="`/c/${c.id}`">{{ c.name }}</RouterLink>
-                <span class="col-title">{{ c.title || '—' }}</span>
-              </div>
-            </template>
-            <span v-else class="col-empty">未选择角色</span>
-          </div>
-        </div>
+    <TransitionGroup v-if="a || b" tag="section" name="compare-swap" class="compare-board"
+      :move-class="swapping ? 'compare-swap-move' : 'compare-no-move'" @leave="(_, done) => done()"
+      aria-label="角色属性对比" :style="{ '--panel-rows': rows.length + 1 }">
+      <article v-for="{ key, character } in sides" :key="character && idA !== idB ? character.id : key" class="compare-panel gs-panel"
+        :class="`side-${key}`" :style="{ '--accent': elementColor(character?.element) }">
+        <button v-if="posterOf(character)" type="button" class="floating-poster" :aria-label="`点亮${character.name}海报`" @click="pulsePoster">
+          <img :src="posterOf(character)" :alt="`${character.name} 立绘`" draggable="false" />
+          <span class="poster-flare" aria-hidden="true"></span>
+        </button>
 
-        <div v-for="r in rows" :key="r.key" class="cmp-row" :class="{ diff: r.diff }">
+        <header class="panel-head">
+          <img v-if="elementIcon(character?.element)" class="panel-sigil" :src="assetUrl(elementIcon(character.element))" alt="" />
+          <h2>
+            <RouterLink v-if="character" class="col-name" :to="`/c/${character.id}`">{{ character.name }}</RouterLink>
+            <span v-else class="col-empty">未选择角色</span>
+          </h2>
+          <p v-if="character?.title" class="col-title">{{ character.title }}</p>
+        </header>
+
+        <component v-for="r in rows" :is="r.key === 'cv' ? 'button' : 'div'" :key="r.key"
+          class="cmp-row" :class="{ diff: r.diff }" :data-field="r.key"
+          :type="r.key === 'cv' ? 'button' : undefined" :title="r.key === 'cv' ? '切换两侧的 CV 语言' : undefined"
+          @click="r.key === 'cv' && cycleCv()">
           <span class="row-label">
             {{ r.label }}
-            <em v-if="r.diff" class="diff-dot" title="存在差异" aria-label="存在差异"></em>
+            <span v-if="r.diff" class="diff-dot" title="存在差异" aria-label="存在差异"></span>
           </span>
-          <div class="cell">
-            <ElementBadge v-if="r.badge && a?.element" :element="a.element" size="sm" />
-            <img v-else-if="r.nation && nationIcon(a?.nation)" class="cell-nation" :src="assetUrl(nationIcon(a.nation))" alt="" />
-            <span>{{ r.va }}</span>
-          </div>
-          <div class="cell">
-            <ElementBadge v-if="r.badge && b?.element" :element="b.element" size="sm" />
-            <img v-else-if="r.nation && nationIcon(b?.nation)" class="cell-nation" :src="assetUrl(nationIcon(b.nation))" alt="" />
-            <span>{{ r.vb }}</span>
-          </div>
-        </div>
-      </div>
-    </section>
+          <span class="cell">
+            <ElementBadge v-if="r.badge && character?.element" :element="character.element" size="sm" />
+            <img v-else-if="r.nation && nationIcon(character?.nation)" class="cell-nation" :src="assetUrl(nationIcon(character.nation))" alt="" />
+            <span>{{ key === 'a' ? r.va : r.vb }}</span>
+          </span>
+          <span v-if="r.key === 'cv'" class="cv-cycle-icon" aria-hidden="true">↻</span>
+        </component>
+      </article>
+    </TransitionGroup>
 
     <p v-else class="empty">先在上方选择两位角色开始对比。</p>
 
-    <p class="tip">星标处表示两者取值不同；只想看某一侧时，可用上方选择器随时替换。</p>
+    <p v-if="diffCount" class="tip">金色菱形标出两位角色的差异。</p>
   </div>
 </template>
 
 <style scoped>
 .page {
+  --art-width: clamp(138px, 16vw, 240px);
+  --edge-space: calc(var(--art-width) * 0.57);
+  --content-inset: calc(var(--art-width) * 0.46);
+  --panel-gap: 24px;
   max-width: 1440px;
   margin: 0 auto;
   padding: 0 28px 60px;
 }
 
-.pickers {
+.pickers,
+.compare-board {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--panel-gap);
+  margin-inline: var(--edge-space);
+}
+
+.pickers {
+  position: relative;
+  z-index: 2;
   margin-bottom: 18px;
 }
 
@@ -158,50 +212,133 @@ const paintingsOf = (c) => (c?.images?.paintings || []).slice(0, 2)
 }
 
 .pick-label {
-  font-size: 12px;
   color: var(--gs-ink-3);
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  text-align: center;
 }
 
-.panel {
-  padding: 8px 18px 14px;
-}
-
-.cmp-posters,
-.cmp-row {
+.compare-panel {
+  position: relative;
   display: grid;
-  grid-template-columns: 110px 1fr 1fr;
-  gap: 12px;
-  align-items: center;
+  grid-row: 1 / span var(--panel-rows);
+  grid-template-rows: subgrid;
+  min-width: 0;
+  padding-bottom: 14px;
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--gs-line));
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 19%, transparent), transparent 50%),
+    var(--gs-panel);
+  text-align: center;
 }
 
-.cmp-posters {
-  align-items: start;
-  padding: 16px 0 14px;
-  border-bottom: 1px solid var(--gs-line);
+.side-a {
+  grid-column: 1;
+  --enter-x: -16px;
 }
 
-.poster-cell {
+.side-b {
+  grid-column: 2;
+  --enter-x: 16px;
+}
+
+.compare-swap-move {
+  transition: transform 0.52s var(--gs-ease);
+}
+
+.compare-swap-enter-active {
+  animation: panel-enter 0.34s var(--gs-ease) both;
+}
+
+@keyframes panel-enter {
+  from { opacity: 0; translate: var(--enter-x) 0; }
+}
+
+.floating-poster {
+  position: absolute;
+  z-index: 1;
+  top: 42px;
+  left: 0%;
+  display: grid;
+  place-items: center;
+  width: var(--art-width);
+  padding: 0;
+  transform: translateX(-52%) rotate(-5deg);
+  border-radius: 10px;
+  transition: left 0.52s var(--gs-ease), transform 0.52s var(--gs-ease);
+}
+
+.side-b .floating-poster {
+  left: 100%;
+  transform: translateX(-48%) rotate(5deg);
+}
+
+.floating-poster img {
+  grid-area: 1 / 1;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(48vw, 540px);
+  border: 1px solid var(--gs-line-hi);
+  border-radius: 9px;
+  box-shadow: 0 22px 42px #030c17b3, 0 0 28px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.floating-poster:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.floating-poster:active img {
+  filter: brightness(1.12);
+}
+
+.poster-flare {
+  grid-area: 1 / 1;
+  align-self: stretch;
+  width: 86%;
+  border-radius: 9px;
+  opacity: 0;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%);
+  box-shadow: inset 0 0 18px var(--accent), 0 0 32px var(--accent);
+  pointer-events: none;
+}
+
+.panel-head {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
+  justify-content: center;
+  min-height: 138px;
+  margin-inline: var(--content-inset);
+  border-bottom: 1px solid var(--gs-line-hi);
+  padding: 16px 4px;
 }
 
-.col-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
+.panel-sigil {
+  position: absolute;
+  z-index: -1;
+  inset: 50% auto auto 50%;
+  width: 102px;
+  height: 102px;
+  object-fit: contain;
+  opacity: 0.17;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.panel-head h2 {
+  font-family: var(--gs-font-display);
+  font-size: clamp(23px, 2.5vw, 37px);
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .col-name {
   color: var(--gs-ink);
-  font-family: var(--gs-font-display);
-  font-size: 19px;
-  text-decoration: none;
 }
 
 .col-name:hover {
@@ -209,88 +346,127 @@ const paintingsOf = (c) => (c?.images?.paintings || []).slice(0, 2)
 }
 
 .col-title {
-  font-size: 11.5px;
-  color: var(--gs-ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-top: 7px;
+  color: var(--gs-gold);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .col-empty {
   color: var(--gs-ink-3);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .cmp-row {
-  padding: 9px 2px;
-  border-bottom: 1px solid rgba(237, 230, 214, 0.06);
-  font-size: 13px;
-  color: var(--gs-ink-2);
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  margin-inline: var(--content-inset);
+  border-bottom: 1px solid var(--gs-line);
+  padding: 5px 6px;
 }
 
 .cmp-row.diff {
-  background: linear-gradient(90deg, rgba(211, 188, 142, 0.07), transparent 60%);
+  background: linear-gradient(90deg, transparent, #d3bc8e13, transparent);
+}
+
+button.cmp-row {
+  position: relative;
+  padding-inline: 22px;
+  border-radius: 6px;
+}
+
+button.cmp-row:hover,
+button.cmp-row:focus-visible {
+  background: #d3bc8e22;
+}
+
+.cv-cycle-icon {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  color: var(--gs-gold);
+  transform: translateY(-50%);
 }
 
 .row-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  position: relative;
   color: var(--gs-ink-3);
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .diff-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+  position: absolute;
+  inset: 50% auto auto calc(100% + 7px);
+  width: 4px;
+  height: 4px;
   background: var(--gs-gold);
+  transform: translateY(-50%) rotate(45deg);
 }
 
 .cell {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
-  word-break: break-word;
+  max-width: 100%;
+  color: var(--gs-ink);
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .cell-nation {
   width: 18px;
   height: 18px;
   object-fit: contain;
-  opacity: 0.9;
 }
 
-.empty {
-  padding: 40px 0;
+.empty,
+.tip {
   text-align: center;
   color: var(--gs-ink-3);
 }
 
-.tip {
-  margin-top: 12px;
-  font-size: 11.5px;
-  color: var(--gs-ink-3);
+.empty {
+  padding: 40px 0;
 }
 
-@media (max-width: 900px) {
+.tip {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 780px) {
   .page {
+    --art-width: 70px;
+    --edge-space: 0px;
+    --content-inset: 8px;
+    --panel-gap: 10px;
     padding: 0 14px 40px;
   }
-  .pickers {
-    grid-template-columns: 1fr;
+
+  .panel-head {
+    min-height: 0;
+    padding-top: 16px;
   }
-  .cmp-posters,
-  .cmp-row {
-    grid-template-columns: 70px 1fr 1fr;
-    gap: 8px;
+
+  .compare-panel:has(.floating-poster) .panel-head {
+    padding-top: 125px;
   }
-  .col-name {
-    font-size: 15px;
+
+  .floating-poster,
+  .side-b .floating-poster {
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
   }
-  .cmp-row {
-    font-size: 12px;
+
+  .floating-poster img {
+    max-height: 102px;
   }
 }
 </style>

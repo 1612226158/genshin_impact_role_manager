@@ -30,7 +30,7 @@ try {
 
   console.log('1) 编辑角色并保存')
   await openRoute(page, BASE, '/c/1055')
-  await page.evaluate(() => [...document.querySelectorAll('.actions button')].find(b => b.textContent.trim() === '编辑').click())
+  await page.click('.detail-edit')
   await page.waitForFunction(() => Boolean(document.querySelector('dialog[open]')))
   await sleep(900)
   const found = await page.evaluate(() => {
@@ -128,6 +128,11 @@ try {
     b?.click()
   })
   await sleep(800)
+  check('已加入相册的文字和勾号在同一行', await page.$eval('.album-action', (button) => {
+    const label = button.firstElementChild.getBoundingClientRect()
+    const mark = button.querySelector('.album-check')?.getBoundingClientRect()
+    return Boolean(mark) && Math.abs(label.top + label.height / 2 - mark.top - mark.height / 2) < 2 && label.right <= mark.left
+  }))
   await openRoute(page, BASE, '/album')
   check('相册出现收藏项', await page.evaluate(() => document.querySelectorAll('.tile').length > 0))
   check(

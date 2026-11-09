@@ -37,10 +37,7 @@ try {
   check('「属性」按钮与右侧姓名顶线一致', Math.abs(align.name - base) <= 2, `Δ=${(align.name - base).toFixed(1)}`)
 
   console.log('2) 打开编辑模态')
-  await page.evaluate(() => {
-    const btn = [...document.querySelectorAll('.actions button')].find((b) => b.textContent.trim() === '编辑')
-    btn?.click()
-  })
+  await page.click('.detail-edit')
   await page.waitForFunction(() => Boolean(document.querySelector('dialog[open] .form')), { timeout: 8000 })
   await sleep(700)
 
@@ -186,8 +183,8 @@ try {
   check('2 月 29 日可以保存到角色详情', await page.$eval('.tab-body', (body) => body.textContent.includes('2月29日')))
 
   await openRoute(page, BASE, '/c/509226')
-  await page.waitForFunction(() => [...document.querySelectorAll('.actions button')].some((b) => b.textContent.trim() === '编辑'))
-  await page.evaluate(() => [...document.querySelectorAll('.actions button')].find((b) => b.textContent.trim() === '编辑').click())
+  await page.waitForFunction(() => Boolean(document.querySelector('.detail-edit')))
+  await page.click('.detail-edit')
   await page.waitForFunction(() => Boolean(document.querySelector('dialog[open] .form')))
   check('未设置月份时日期不可选', await page.$eval(field('日期'), (button) => button.disabled))
   await save()

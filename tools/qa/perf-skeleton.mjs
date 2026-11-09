@@ -88,7 +88,7 @@ try {
   check('分节数量 > 0', story.sections > 0, `sections=${story.sections}`)
 
   console.log('3) 编辑器：载入完成前禁止保存')
-  await page.evaluate(() => [...document.querySelectorAll('.actions button')].find((b) => b.textContent.trim() === '编辑')?.click())
+  await page.click('.detail-edit')
   await page.waitForFunction(() => Boolean(document.querySelector('dialog[open]')), { timeout: 10000 })
   await sleep(150)
   const guard = await page.evaluate(() => {
