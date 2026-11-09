@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import CharacterPicker from '@/components/CharacterPicker.vue'
 import ElementBadge from '@/components/ElementBadge.vue'
+import ArtStack from '@/components/ArtStack.vue'
 import { useCharacterStore } from '@/stores/character'
 import { assetUrl } from '@/utils/asset'
 import { nationIcon } from '@/utils/element'
@@ -72,6 +73,8 @@ watch([idA, idB], () => {
 })
 
 const avatarOf = (c) => assetUrl(c?.images?.avatar_hd || c?.images?.avatar || '')
+/** 立绘：最多取两张参与叠层，保留 editor-art 的卡片堆叠观感 */
+const paintingsOf = (c) => (c?.images?.paintings || []).slice(0, 2)
 </script>
 
 <template>
@@ -94,11 +97,12 @@ const avatarOf = (c) => assetUrl(c?.images?.avatar_hd || c?.images?.avatar || ''
 
     <section v-if="a || b" class="panel gs-panel">
       <div class="cmp" :class="{ single: !a || !b }">
-        <header class="cmp-head">
+        <!-- 立绘区：一左一右，复用 editor-art 的叠加卡片样式 -->
+        <div class="cmp-posters">
           <span class="col-label" aria-hidden="true"></span>
-          <div v-for="(c, i) in [a, b]" :key="i" class="col-head">
+          <div v-for="(c, i) in [a, b]" :key="`poster-${i}`" class="poster-cell">
             <template v-if="c">
-              <img v-if="avatarOf(c)" class="col-avatar" :src="avatarOf(c)" :alt="`${c.name} 头像`" />
+              <ArtStack :srcs="paintingsOf(c)" :alt="`${c.name} 立绘`" height="320px" placeholder="暂无立绘" />
               <div class="col-meta">
                 <RouterLink class="col-name" :to="`/c/${c.id}`">{{ c.name }}</RouterLink>
                 <span class="col-title">{{ c.title || '—' }}</span>
@@ -106,7 +110,7 @@ const avatarOf = (c) => assetUrl(c?.images?.avatar_hd || c?.images?.avatar || ''
             </template>
             <span v-else class="col-empty">未选择角色</span>
           </div>
-        </header>
+        </div>
 
         <div v-for="r in rows" :key="r.key" class="cmp-row" :class="{ diff: r.diff }">
           <span class="row-label">
@@ -163,7 +167,7 @@ const avatarOf = (c) => assetUrl(c?.images?.avatar_hd || c?.images?.avatar || ''
   padding: 8px 18px 14px;
 }
 
-.cmp-head,
+.cmp-posters,
 .cmp-row {
   display: grid;
   grid-template-columns: 110px 1fr 1fr;
@@ -171,30 +175,24 @@ const avatarOf = (c) => assetUrl(c?.images?.avatar_hd || c?.images?.avatar || ''
   align-items: center;
 }
 
-.cmp-head {
-  padding: 14px 0 12px;
+.cmp-posters {
+  align-items: start;
+  padding: 16px 0 14px;
   border-bottom: 1px solid var(--gs-line);
 }
 
-.col-head {
+.poster-cell {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
 
-.col-avatar {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: #efe9df;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
-}
-
 .col-meta {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
   min-width: 0;
 }
@@ -283,9 +281,9 @@ const avatarOf = (c) => assetUrl(c?.images?.avatar_hd || c?.images?.avatar || ''
   .pickers {
     grid-template-columns: 1fr;
   }
-  .cmp-head,
+  .cmp-posters,
   .cmp-row {
-    grid-template-columns: 78px 1fr 1fr;
+    grid-template-columns: 70px 1fr 1fr;
     gap: 8px;
   }
   .col-name {

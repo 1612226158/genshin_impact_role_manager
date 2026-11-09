@@ -51,6 +51,39 @@ try {
   check('生日行与数据一致（11月26日 / 10月13日）', data.rows['生日']?.cells.join('|') === '11月26日|10月13日')
   check('相异字段带差异标记', data.rows['元素']?.diff === true)
 
+  console.log('2b) 立绘海报（叠加卡片样式）')
+  const posters = await page.evaluate(() => {
+    const stacks = [...document.querySelectorAll('.painting-stack')]
+    const first = document.querySelector('.cmp-row')
+    return stacks.map((s) => {
+      const r = s.getBoundingClientRect()
+      const img = s.querySelector('img')
+      const ir = img?.getBoundingClientRect()
+      return {
+        cx: Math.round(r.left + r.width / 2),
+        cy: Math.round(r.top + r.height / 2),
+        h: Math.round(r.height),
+        // 注意：img 有 rotate 变换，getBoundingClientRect 会被旋转放大的外接框干扰，
+        // 因此用未变换的 offsetWidth/offsetHeight 判断是否超出容器布局尺寸
+        img: img
+          ? {
+              nw: img.naturalWidth,
+              w: Math.round(img.offsetWidth),
+              h: Math.round(img.offsetHeight),
+              inside: img.offsetWidth <= s.clientWidth + 1 && img.offsetHeight <= s.clientHeight + 1,
+            }
+          : null,
+        aboveTable: first ? r.bottom <= first.getBoundingClientRect().top + 4 : null,
+      }
+    })
+  })
+  console.log('   ', JSON.stringify(posters))
+  check('左右各有一个立绘卡片容器', posters.length === 2)
+  check('两侧立绘均已解码（naturalWidth > 0）', posters.every((p) => p.img && p.img.nw > 0))
+  check('立绘在容器内未被裁切', posters.every((p) => p.img.inside))
+  check('左侧立绘在左、右侧在右', posters[0].cx < posters[1].cx - 100)
+  check('立绘区位于对比表上方', posters.every((p) => p.aboveTable !== false))
+
   console.log('3) 相同字段不标差异')
   await openRoute(page, BASE, '/compare?a=1071&b=1056')
   await sleep(700)
