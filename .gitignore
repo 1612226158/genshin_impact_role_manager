@@ -16,3 +16,10 @@ Thumbs.db
 
 # 参考视频抽帧与本地界面验证截图（可重新生成）
 /docs/analysis/
+
+# 设计参考视频与截图、旧版数据/原型页（体积大且运行不需要；历史提交中仍存在）
+*.mp4
+/微信图片_*.png
+/snapshoot/
+/index.html
+/characters.json
