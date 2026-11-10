@@ -13,9 +13,24 @@ const props = defineProps({
 const canvasRef = ref(null)
 /** 最近一次绘制出的可拖拽区域（画布坐标），用于判断拖的是海报还是卡牌 */
 const rects = { poster: null, card: null }
+/** 实际生效的归一化偏移（可能被边框夹紧），供拖拽结束后同步状态 */
+const effective = { art: { x: 0, y: 0 }, card: { x: 0, y: 0 } }
 const busy = ref(false)
 const failed = ref(false)
 let drawVersion = 0
+
+/** 图片缓存：避免每次拖动都重新 new Image 解码（那正是闪烁的根源） */
+const imgCache = new Map()
+function getImage(src) {
+  if (!src) return Promise.resolve(null)
+  if (imgCache.has(src)) return Promise.resolve(imgCache.get(src))
+  return loadImage(src)
+    .then((img) => {
+      imgCache.set(src, img)
+      return img
+    })
+    .catch(() => null)
+}
 
 const DEFAULTS = {
   width: 1080,
@@ -56,26 +71,27 @@ function autoMeta(c) {
   return parts.join('  ·  ')
 }
 
-async function draw() {
-  const canvas = canvasRef.value
-  const c = props.character
-  if (!canvas || !c) return
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
-  const version = ++drawVersion
-  const { width: w, height: h, texts, show, art, card: cardCfg } = cfg.value
-  rects.poster = null
-  rects.card = null
-  canvas.width = w
-  canvas.height = h
+/* ---------------- 静态层：底纹 / 边框 / 文字，只在版式改变时重绘 ---------------- */
+let staticLayer = null
+let staticKey = ''
 
-  const ctx = canvas.getContext('2d')
-  const el = elementColor(c.element)
-  // 字号随画幅等比缩放，保证 1:1 / 3:4 / 4:3 / 自由比例下观感一致
+function layout(w, h, show) {
+  // 字号随画幅等比缩放，保证不同比例下观感一致
   const s = Math.min(1.6, Math.max(0.5, Math.min(w / 1080, h / 1350)))
   const margin = Math.round(46 * s)
+  return { s, margin, footerH: show.footer ? 64 * s : 24 * s }
+}
 
-  busy.value = true
-  failed.value = false
+async function renderStatic(key, w, h, cfgV, c) {
+  const { s, margin } = layout(w, h, cfgV.show)
+  const cv = document.createElement('canvas')
+  cv.width = w
+  cv.height = h
+  const ctx = cv.getContext('2d')
+  const el = elementColor(c.element)
+  const { texts, show } = cfgV
 
   const g = ctx.createLinearGradient(0, 0, 0, h)
   g.addColorStop(0, mix(el, '#ffffff', 0.9))
@@ -110,8 +126,7 @@ async function draw() {
   const iconPath = elementIcon(c.element)
   if (show.icon && iconPath) {
     const iconSize = 62 * s
-    const icon = await loadImage(assetUrl(iconPath)).catch(() => null)
-    if (version !== drawVersion) return
+    const icon = await getImage(assetUrl(iconPath))
     if (icon) ctx.drawImage(icon, w / 2 - iconSize / 2, y - iconSize / 2, iconSize, iconSize)
     y += iconSize / 2 + 28 * s
   } else {
@@ -130,7 +145,6 @@ async function draw() {
   ctx.fillStyle = '#2e2a25'
   ctx.font = `700 ${nameSize}px "Noto Serif SC", "Songti SC", serif`
   ctx.fillText(texts.name || c.name || '角色', w / 2, y)
-  // 名字字号大，行高按字号推进，避免与下方副标题重叠
   y += nameSize * 0.42
 
   const metaText = show.meta ? texts.meta || autoMeta(c) : ''
@@ -164,121 +178,19 @@ async function draw() {
     y += signSize * 1.9
   }
 
-  const footerH = show.footer ? 64 * s : 24 * s
+  // 白色相纸（立绘容器），文字区之外的部分
   const artTop = y + 24 * s
-  const artBottom = h - footerH
-  const { poster, card } = artSources(c)
-  const mode = cfg.value.artMode || 'poster'
+  const artBottom = h - (show.footer ? 64 * s : 24 * s)
   const artInset = margin + 6 * s
   const boxW = w - artInset * 2
   const boxH = Math.max(60, artBottom - artTop)
   const radius = 24 * s
-  const scale = Math.max(0.2, art.scale || 1)
 
-  // 白底相纸
   ctx.save()
   roundRect(ctx, artInset, artTop, boxW, boxH, radius)
   ctx.fillStyle = '#ffffff'
   ctx.fill()
   ctx.restore()
-
-  const roundClip = (x, y, rw, rh, r) => {
-    ctx.save()
-    roundRect(ctx, x, y, rw, rh, r)
-    ctx.clip()
-  }
-  const goldStroke = (x, y, rw, rh, r) => {
-    ctx.save()
-    roundRect(ctx, x + 1, y + 1, rw - 2, rh - 2, Math.max(1, r - 1))
-    ctx.strokeStyle = 'rgba(168, 130, 63, 0.55)'
-    ctx.lineWidth = 2
-    ctx.stroke()
-    ctx.restore()
-  }
-
-  try {
-    if (mode === 'card') {
-      // 卡牌：居中方形，cover 裁切，白边 + 投影
-      const src = await loadImage(card)
-      if (version !== drawVersion) return
-      const side = Math.min(boxW, boxH) * 0.94
-      const x0 = w / 2 - side / 2 + (art.x || 0) * ((boxW - side) / 2)
-      const y0 = artTop + (boxH - side) / 2 + (art.y || 0) * ((boxH - side) / 2)
-      const k = (side / Math.min(src.width, src.height)) * scale
-      const dw = src.width * k
-      const dh = src.height * k
-
-      ctx.save()
-      ctx.shadowColor = 'rgba(120, 90, 40, 0.32)'
-      ctx.shadowBlur = 28 * s
-      ctx.shadowOffsetY = 10 * s
-      roundRect(ctx, x0, y0, side, side, radius)
-      ctx.fillStyle = '#ffffff'
-      ctx.fill()
-      ctx.restore()
-
-      roundClip(x0, y0, side, side, radius)
-      ctx.drawImage(src, x0 + side / 2 - dw / 2, y0 + side / 2 - dh / 2, dw, dh)
-      ctx.restore()
-      goldStroke(x0, y0, side, side, radius)
-      rects.poster = { x: x0, y: y0, w: side, h: side }
-    } else {
-      // 海报（或两者都放的主图）：contain 完整显示，可缩放偏移
-      const src = await loadImage(poster)
-      if (version !== drawVersion) return
-      const base = Math.min(boxW / src.width, boxH / src.height)
-      const k = base * scale
-      const dw = src.width * k
-      const dh = src.height * k
-      const cx = w / 2 + (art.x || 0) * (boxW / 2)
-      const cy = artTop + boxH / 2 + (art.y || 0) * (boxH / 2)
-
-      roundClip(artInset, artTop, boxW, boxH, radius)
-      ctx.drawImage(src, cx - dw / 2, cy - dh / 2, dw, dh)
-      ctx.restore()
-      rects.poster = { x: artInset, y: artTop, w: boxW, h: boxH }
-
-      if (mode === 'both') {
-        // 卡牌插图：基准位在左下角，可独立缩放与位移（与海报互不影响）
-        const inset = await loadImage(card)
-        if (version !== drawVersion) return
-        const baseCw = Math.min(boxW * 0.34, boxH * 0.36)
-        const cw = baseCw * Math.max(0.4, cardCfg.scale || 1)
-        const px = artInset + 18 * s + (cardCfg.x || 0) * ((boxW - cw) / 2)
-        const py = artTop + boxH - cw - 18 * s + (cardCfg.y || 0) * ((boxH - cw) / 2)
-        rects.card = { x: px, y: py, w: cw, h: cw }
-        const kk = cw / Math.min(inset.width, inset.height)
-        const iw = inset.width * kk
-        const ih = inset.height * kk
-
-        ctx.save()
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
-        ctx.shadowBlur = 22 * s
-        ctx.shadowOffsetY = 6 * s
-        roundRect(ctx, px, py, cw, cw, radius * 0.7)
-        ctx.fillStyle = '#ffffff'
-        ctx.fill()
-        ctx.restore()
-
-        roundClip(px, py, cw, cw, radius * 0.7)
-        ctx.drawImage(inset, px + cw / 2 - iw / 2, py + cw / 2 - ih / 2, iw, ih)
-        ctx.restore()
-
-        ctx.save()
-        roundRect(ctx, px, py, cw, cw, radius * 0.7)
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
-        ctx.lineWidth = 5 * s
-        ctx.stroke()
-        ctx.restore()
-      }
-      goldStroke(artInset, artTop, boxW, boxH, radius)
-    }
-  } catch (err) {
-    if (version !== drawVersion) return
-    console.warn('[生日卡] 立绘绘制失败', err)
-    failed.value = true
-    drawNoArt(ctx, w, artTop, artBottom, s)
-  }
 
   if (show.footer) {
     ctx.textAlign = 'center'
@@ -289,14 +201,173 @@ async function draw() {
     ctx.letterSpacing = '0px'
   }
 
-  busy.value = false
+  return { layer: cv, key, layout: { s, margin, artTop, artBottom, artInset, boxW, boxH, radius } }
 }
 
-function drawNoArt(ctx, w, top, bottom, s) {
-  ctx.textAlign = 'center'
-  ctx.fillStyle = 'rgba(120,108,92,0.55)'
-  ctx.font = `400 ${Math.round(22 * s)}px "Noto Sans SC", sans-serif`
-  ctx.fillText('该角色暂无可用于生成卡片的立绘', w / 2, (top + bottom) / 2)
+/* ---------------- 立绘层：每次拖动只重绘这一层 ---------------- */
+function drawArt(ctx, cfgV, L, posterImg, cardImg) {
+  const { s, artTop, artInset, boxW, boxH, radius } = L
+  const { art, card: cardCfg, artMode } = cfgV
+  const scale = Math.max(0.2, art.scale || 1)
+  rects.poster = null
+  rects.card = null
+
+  const roundClip = (x, y, rw, rh, r) => {
+    ctx.save()
+    roundRect(ctx, x, y, rw, rh, r)
+    ctx.clip()
+  }
+  const goldStroke = (x, y, rw, rh, r, alpha = 0.55) => {
+    ctx.save()
+    roundRect(ctx, x + 1, y + 1, rw - 2, rh - 2, Math.max(1, r - 1))
+    ctx.strokeStyle = `rgba(168, 130, 63, ${alpha})`
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  if (artMode === 'card') {
+    if (!cardImg) return
+    const side = Math.min(boxW, boxH) * 0.94
+    // 位置映射天然落在相纸内部（x∈[-1,1] → [artInset, artInset+boxW-side]）
+    const x0 = artInset + (boxW - side) / 2 + clamp(art.x || 0, -1, 1) * ((boxW - side) / 2)
+    const y0 = artTop + (boxH - side) / 2 + clamp(art.y || 0, -1, 1) * ((boxH - side) / 2)
+    const k = side / Math.min(cardImg.width, cardImg.height) * scale
+    const dw = cardImg.width * k
+    const dh = cardImg.height * k
+
+    ctx.save()
+    ctx.shadowColor = 'rgba(120, 90, 40, 0.32)'
+    ctx.shadowBlur = 28 * s
+    ctx.shadowOffsetY = 10 * s
+    roundRect(ctx, x0, y0, side, side, radius)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+    ctx.restore()
+
+    roundClip(x0, y0, side, side, radius)
+    ctx.drawImage(cardImg, x0 + side / 2 - dw / 2, y0 + side / 2 - dh / 2, dw, dh)
+    ctx.restore()
+
+    goldStroke(x0, y0, side, side, radius)
+    rects.poster = { x: x0, y: y0, w: side, h: side }
+    effective.art.x = art.x || 0
+    effective.art.y = art.y || 0
+    return
+  }
+
+  if (!posterImg) return
+  const base = Math.min(boxW / posterImg.width, boxH / posterImg.height)
+  const k = base * scale
+  const dw = posterImg.width * k
+  const dh = posterImg.height * k
+
+  // 关键：位移被夹紧在相纸内 —— 图片小于相纸时不可移动，大于相纸时最多移到边
+  const maxX = Math.max(0, (dw - boxW) / 2)
+  const maxY = Math.max(0, (dh - boxH) / 2)
+  const offX = clamp((art.x || 0) * (boxW / 2), -maxX, maxX)
+  const offY = clamp((art.y || 0) * (boxH / 2), -maxY, maxY)
+  const cx = artInset + boxW / 2 + offX
+  const cy = artTop + boxH / 2 + offY
+
+  roundClip(artInset, artTop, boxW, boxH, radius)
+  ctx.drawImage(posterImg, cx - dw / 2, cy - dh / 2, dw, dh)
+  ctx.restore()
+  rects.poster = { x: artInset, y: artTop, w: boxW, h: boxH }
+
+  effective.art.x = maxX ? offX / (boxW / 2) : 0
+  effective.art.y = maxY ? offY / (boxH / 2) : 0
+
+  if (artMode === 'both' && cardImg) {
+    const m = 18 * s
+    const baseCw = Math.min(boxW * 0.34, boxH * 0.36)
+    const cw = baseCw * Math.max(0.4, cardCfg.scale || 1)
+    // 卡牌也只在相纸内移动：映射区间已扣除自身尺寸与内边距
+    const px = artInset + m + clamp(cardCfg.x || 0, -1, 1) * ((boxW - cw - m * 2) / 2)
+    const py = artTop + boxH - cw - m + clamp(cardCfg.y || 0, -1, 1) * ((boxH - cw - m * 2) / 2)
+    const kk = cw / Math.min(cardImg.width, cardImg.height)
+    const iw = cardImg.width * kk
+    const ih = cardImg.height * kk
+
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+    ctx.shadowBlur = 22 * s
+    ctx.shadowOffsetY = 6 * s
+    roundRect(ctx, px, py, cw, cw, radius * 0.7)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+    ctx.restore()
+
+    roundClip(px, py, cw, cw, radius * 0.7)
+    ctx.drawImage(cardImg, px + cw / 2 - iw / 2, py + cw / 2 - ih / 2, iw, ih)
+    ctx.restore()
+
+    // 白色衬边 + 金色细边，让卡牌与海报层次分明
+    ctx.save()
+    roundRect(ctx, px, py, cw, cw, radius * 0.7)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)'
+    ctx.lineWidth = 6 * s
+    ctx.stroke()
+    ctx.restore()
+    goldStroke(px, py, cw, cw, radius * 0.7, 0.75)
+
+    rects.card = { x: px, y: py, w: cw, h: cw }
+    effective.card.x = cardCfg.x || 0
+    effective.card.y = cardCfg.y || 0
+  }
+}
+
+async function draw() {
+  const canvas = canvasRef.value
+  const c = props.character
+  if (!canvas || !c) return
+
+  const version = ++drawVersion
+  const cfgV = cfg.value
+  const { width: wpx, height: hpx } = cfgV
+  const { poster, card } = artSources(c)
+
+  // 只在尺寸变化时重设，避免无谓清屏
+  if (canvas.width !== wpx || canvas.height !== hpx) {
+    canvas.width = wpx
+    canvas.height = hpx
+  }
+
+  busy.value = true
+  failed.value = false
+
+  const key = JSON.stringify({
+    w: wpx,
+    h: hpx,
+    texts: cfgV.texts,
+    show: cfgV.show,
+    mode: cfgV.artMode,
+    poster,
+    card,
+    el: c.element,
+    name: c.name,
+    meta: autoMeta(c),
+  })
+
+  // 静态层只在版式/文案/画幅变化时重建
+  if (!staticLayer || staticKey !== key) {
+    const built = await renderStatic(key, wpx, hpx, cfgV, c)
+    if (version !== drawVersion) return
+    staticLayer = built.layer
+    staticKey = built.key
+    staticLayer._layout = built.layout
+  }
+
+  const L = staticLayer._layout
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, wpx, hpx)
+  ctx.drawImage(staticLayer, 0, 0)
+
+  const [posterImg, cardImg] = await Promise.all([getImage(poster), getImage(card)])
+  if (version !== drawVersion) return
+
+  drawArt(ctx, cfgV, L, posterImg, cardImg)
+  busy.value = false
 }
 
 /** 导出：type 支持 png / jpeg / webp；scale=2 输出双倍尺寸 */
@@ -323,12 +394,14 @@ function hitTest(x, y) {
 }
 
 const rectOf = (target) => rects[target] || null
+const effectiveOffsets = () => ({ art: { ...effective.art }, card: { ...effective.card } })
 
 defineExpose({
   exportBlob,
   redraw: draw,
   hitTest,
   rectOf,
+  effectiveOffsets,
   dims: () => ({ width: cfg.value.width, height: cfg.value.height }),
 })
 

@@ -141,17 +141,22 @@ try {
   const afterZoom = await canvasInfo(page)
   check('缩放立绘后画面改变', afterZoom.hash !== afterToggle.hash)
 
-  console.log('5b) 两者都放：海报与卡牌可分别拖拽，速率不同')
+  console.log('5b) 两者都放：海报与卡牌可分别拖拽，速率按各自区域换算')
   await setArtMode(page, '两者都放')
-  const readOffsets = () =>
+  // 放大海报才有可拖动余量（默认 contain 时被相纸夹住，无法移动）
+  await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .range input[type=range]')
+    r.value = '1.6'
+    r.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await sleep(700)
+
+  const readSliders = () =>
     page.evaluate(() => {
-      const labels = [...document.querySelectorAll('dialog[open] .range')].map((l) => l.querySelector('span').textContent.trim())
-      const num = (prefix) => {
-        const hit = labels.find((t) => t.startsWith(prefix))
-        const m = hit && hit.match(/-?\d+/)
-        return m ? Number(m[0]) : null
-      }
-      return { poster: num('水平'), card: num('卡牌') ?? num('水平') }
+      const texts = [...document.querySelectorAll('dialog[open] .range span')].map((el) => el.textContent.trim())
+      const pick = (label) =>
+        texts.filter((t) => t.startsWith(label)).map((t) => Number(t.match(/-?\d+/)[0]))
+      return { h: pick('水平'), v: pick('垂直') }
     })
 
   const cvRect = await page.evaluate(() => {
@@ -159,39 +164,118 @@ try {
     return { x: r.left, y: r.top, w: r.width, h: r.height }
   })
 
-  // 拖拽左下角的卡牌插图
-  const beforeDrag = await page.evaluate(() => {
-    const vals = [...document.querySelectorAll('dialog[open] .range span')].map((s) => s.textContent.trim())
-    return vals.filter((t) => t.startsWith('水平')).map((t) => Number(t.match(/-?\d+/)[0]))
-  })
+  const base5b = await readSliders()
+
+  // 拖左下角卡牌（水平）
   const cardStart = { x: cvRect.x + cvRect.w * 0.25, y: cvRect.y + cvRect.h * 0.8 }
   await page.mouse.move(cardStart.x, cardStart.y)
   await page.mouse.down()
   await page.mouse.move(cardStart.x + 40, cardStart.y, { steps: 8 })
   await page.mouse.up()
-  await sleep(600)
-  const afterCard = await page.evaluate(() => {
-    const vals = [...document.querySelectorAll('dialog[open] .range span')].map((s) => s.textContent.trim())
-    return vals.filter((t) => t.startsWith('水平')).map((t) => Number(t.match(/-?\d+/)[0]))
-  })
-  check('拖卡牌只移动卡牌插图', afterCard[1] !== beforeDrag[1] && afterCard[0] === beforeDrag[0], `${beforeDrag} → ${afterCard}`)
+  await sleep(500)
+  const afterCard = await readSliders()
+  check(
+    '拖卡牌只改变卡牌位移',
+    afterCard.h[1] !== base5b.h[1] && afterCard.h[0] === base5b.h[0],
+    `海报水平 ${base5b.h[0]}→${afterCard.h[0]} / 卡牌水平 ${base5b.h[1]}→${afterCard.h[1]}`
+  )
 
-  // 拖拽海报中部
+  // 拖海报（垂直，默认缩放时水平被边界夹住）
   const posterStart = { x: cvRect.x + cvRect.w * 0.5, y: cvRect.y + cvRect.h * 0.45 }
   await page.mouse.move(posterStart.x, posterStart.y)
   await page.mouse.down()
-  await page.mouse.move(posterStart.x + 40, posterStart.y, { steps: 8 })
+  await page.mouse.move(posterStart.x, posterStart.y + 40, { steps: 8 })
   await page.mouse.up()
-  await sleep(600)
-  const afterPoster = await page.evaluate(() => {
-    const vals = [...document.querySelectorAll('dialog[open] .range span')].map((s) => s.textContent.trim())
-    return vals.filter((t) => t.startsWith('水平')).map((t) => Number(t.match(/-?\d+/)[0]))
-  })
-  check('拖海报只移动海报', afterPoster[0] !== afterCard[0] && afterPoster[1] === afterCard[1], `${afterCard} → ${afterPoster}`)
+  await sleep(500)
+  const afterPoster = await readSliders()
+  check(
+    '拖海报只改变海报位移',
+    afterPoster.v[0] !== afterCard.v[0] && afterPoster.v[1] === afterCard.v[1],
+    `海报垂直 ${afterCard.v[0]}→${afterPoster.v[0]} / 卡牌垂直 ${afterCard.v[1]}→${afterPoster.v[1]}`
+  )
 
-  const cardDelta = Math.abs(afterCard[1] - beforeDrag[1])
-  const posterDelta = Math.abs(afterPoster[0] - beforeDrag[0])
-  check('同一手势下卡牌位移幅度大于海报（速率不同）', cardDelta > posterDelta * 1.5, `card=${cardDelta} poster=${posterDelta}`)
+  const cardDelta = Math.abs(afterCard.h[1] - base5b.h[1])
+  const posterDelta = Math.abs(afterPoster.v[0] - afterCard.v[0])
+  check(
+    '同一手势下卡牌位移幅度大于海报（速率不同）',
+    cardDelta > posterDelta * 1.5,
+    `card=${cardDelta} poster=${posterDelta}`
+  )
+
+  console.log('6b) 拖动不闪烁：静态层不重绘、画布尺寸不重置、位移夹在相纸内')
+  await setArtMode(page, '两者都放')
+  // 放大海报，制造可拖动的余量
+  await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .range input[type=range]')
+    r.value = '1.6'
+    r.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await sleep(700)
+
+  const cvBox = await page.evaluate(() => {
+    const c = document.querySelector('dialog[open] .card-canvas')
+    const r = c.getBoundingClientRect()
+    return { x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height }
+  })
+
+  // 拖动期间逐帧采样标题区像素：若重绘导致清屏，这里会读到空白
+  await page.evaluate(() => {
+    const cv = document.querySelector('dialog[open] .card-canvas')
+    const ctx = cv.getContext('2d')
+    window.__samples = []
+    window.__timer = setInterval(() => {
+      const d = ctx.getImageData(Math.round(cv.width * 0.5), Math.round(cv.height * 0.09), 1, 1).data
+      window.__samples.push([d[0], d[1], d[2], d[3]])
+    }, 16)
+  })
+
+  const start = { x: cvBox.x + cvBox.w * 0.5, y: cvBox.y + cvBox.h * 0.45 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  for (let i = 1; i <= 12; i += 1) {
+    await page.mouse.move(start.x, start.y + i * 8)
+    await sleep(30)
+  }
+  await page.mouse.up()
+  await sleep(400)
+
+  const dragStats = await page.evaluate(() => {
+    clearInterval(window.__timer)
+    const s = window.__samples.slice(1)
+    const first = s[0]
+    const same = s.every((p) => p.join() === first.join())
+    const blank = s.some((p) => p[3] === 0 || (p[0] === 255 && p[1] === 255 && p[2] === 255))
+    const cv = document.querySelector('dialog[open] .card-canvas')
+    return { n: s.length, same, blank, sample: first, cw: cv.width, ch: cv.height }
+  })
+  console.log('   ', JSON.stringify(dragStats))
+  check('拖动期间逐帧采样到有效像素', dragStats.n >= 5 && !dragStats.blank, `samples=${dragStats.n}`)
+  check('标题区像素在拖动中保持不变（静态层未重绘）', dragStats.same, JSON.stringify(dragStats.sample))
+  check('画布尺寸未被重置（不触发整体清屏）', dragStats.cw === cvBox.cw && dragStats.ch === cvBox.ch, `${dragStats.cw}x${dragStats.ch}`)
+
+  // 边界夹紧：向下猛拖后垂直偏移应停在 100 且不越界
+  const clampStart = { x: cvBox.x + cvBox.w * 0.5, y: cvBox.y + cvBox.h * 0.4 }
+  await page.mouse.move(clampStart.x, clampStart.y)
+  await page.mouse.down()
+  await page.mouse.move(clampStart.x, clampStart.y + 420, { steps: 12 })
+  await page.mouse.up()
+  await sleep(500)
+  const clampVal = await page.evaluate(() => {
+    const v = [...document.querySelectorAll('dialog[open] .range span')]
+      .map((el) => el.textContent.trim())
+      .filter((t) => t.startsWith('垂直'))
+      .map((t) => Number(t.match(/-?\d+/)[0]))
+    return v[0]
+  })
+  // contain 拟合下 dh = boxH × 缩放，故可移动上限 = (缩放-1)×100
+  const expectClamp = 60
+  check('海报垂直位移被夹在上限（缩放 1.6 → 60）', clampVal === expectClamp, `垂直=${clampVal} 期望=${expectClamp}`)
+  check('相纸内没有露白（底部像素非纯白）', await page.evaluate(() => {
+    const cv = document.querySelector('dialog[open] .card-canvas')
+    const ctx = cv.getContext('2d')
+    const d = ctx.getImageData(Math.round(cv.width * 0.5), Math.round(cv.height * 0.82), 1, 1).data
+    return !(d[0] === 255 && d[1] === 255 && d[2] === 255)
+  }))
 
   console.log('6) 多格式导出')
   await page.evaluate(() => {

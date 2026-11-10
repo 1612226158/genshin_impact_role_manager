@@ -138,6 +138,15 @@ function onPointerMove(e) {
   store.y = clamp1(drag.oy + dy)
 }
 function onPointerUp() {
+  // 画布会按相纸边界夹紧位移，这里把生效值同步回状态，
+  // 否则滑块会停在越界值上，回拖时出现「死区」
+  if (drag && canvasRef.value?.effectiveOffsets) {
+    const e = canvasRef.value.effectiveOffsets()
+    art.x = e.art.x
+    art.y = e.art.y
+    cardArt.x = e.card.x
+    cardArt.y = e.card.y
+  }
   drag = null
 }
 
