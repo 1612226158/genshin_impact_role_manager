@@ -42,7 +42,7 @@ const DEFAULTS = {
   texts: { name: '', meta: '', greeting: '', sign: '', footer: '原神角色工具 · 素材版权归 miHoYo 所有' },
   show: { icon: true, halo: true, stars: true, frame: true, meta: true, sign: true, footer: true },
   art: { scale: 1, x: 0, y: 0 },
-  card: { scale: 1, x: 0, y: 0 },
+  card: { scale: 1, x: -1, y: 1 },
   artMode: 'poster',
 }
 
@@ -290,9 +290,12 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
     const m = 18 * s
     const baseCw = Math.min(boxW * 0.34, boxH * 0.36)
     const cw = baseCw * Math.max(0.4, cardCfg.scale || 1)
-    // 卡牌也只在相纸内移动：映射区间已扣除自身尺寸与内边距
-    const px = artInset + m + clamp(cardCfg.x || 0, -1, 1) * ((boxW - cw - m * 2) / 2)
-    const py = artTop + boxH - cw - m + clamp(cardCfg.y || 0, -1, 1) * ((boxH - cw - m * 2) / 2)
+    // 在「可用区间」内线性映射：-1 = 左/上边缘，+1 = 右/下边缘，0 = 居中。
+    // 之前以左下角为基准再加减半个余量，导致左侧越界、右侧永远到不了边。
+    const spanX = Math.max(0, boxW - cw - m * 2)
+    const spanY = Math.max(0, boxH - cw - m * 2)
+    const px = artInset + m + ((clamp(cardCfg.x || 0, -1, 1) + 1) / 2) * spanX
+    const py = artTop + m + ((clamp(cardCfg.y || 0, -1, 1) + 1) / 2) * spanY
     const kk = cw / Math.min(cardImg.width, cardImg.height)
     const iw = cardImg.width * kk
     const ih = cardImg.height * kk
@@ -378,6 +381,8 @@ async function draw() {
 
   drawArt(ctx, cfgV, L, posterImg, cardImg)
   canvas.dataset.draws = String(drawCount)
+  canvas.dataset.rects = JSON.stringify({ poster: rects.poster, card: rects.card })
+  canvas.dataset.rects = JSON.stringify({ poster: rects.poster, card: rects.card })
   busy.value = false
 }
 

@@ -61,7 +61,8 @@ const texts = reactive({ name: '', meta: '', greeting: '', sign: '', footer: '�
 const show = reactive({ icon: true, halo: true, stars: true, frame: true, meta: true, sign: true, footer: true })
 const art = reactive({ scale: 1, x: 0, y: 0 })
 /* 「两者都放」时卡牌插图的独立取景 */
-const cardArt = reactive({ scale: 1, x: 0, y: 0 })
+// 卡牌默认贴左下角：x=-1 左边缘、y=+1 下边缘（0 为居中）
+const cardArt = reactive({ scale: 1, x: -1, y: 1 })
 
 const config = computed(() => ({
   width: size.w,
@@ -95,7 +96,7 @@ function resetAll() {
   })
   Object.assign(show, { icon: true, halo: true, stars: true, frame: true, meta: true, sign: true, footer: true })
   Object.assign(art, { scale: 1, x: 0, y: 0 })
-  Object.assign(cardArt, { scale: 1, x: 0, y: 0 })
+  Object.assign(cardArt, { scale: 1, x: -1, y: 1 })
   toast.push('已重置为默认版式')
 }
 

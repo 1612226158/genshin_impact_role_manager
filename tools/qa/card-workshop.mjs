@@ -376,6 +376,53 @@ try {
   const afterV = await readHV()
   check('放大后海报可纵向拖动（此前被回写清零）', afterV.v !== zoomed.v && afterV.v !== 0, `垂直 ${zoomed.v} → ${afterV.v}`)
 
+  console.log('6e) 卡牌边界：左右都能贴到内边距，不越出相纸')
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('重置版式'))?.click())
+  await sleep(500)
+  await setArtMode(page, '两者都放')
+  await sleep(900)
+
+  const rectsOf = () =>
+    page.evaluate(() => JSON.parse(document.querySelector('dialog[open] .card-canvas').dataset.rects || '{}'))
+
+  const cardBox = await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .card-canvas').getBoundingClientRect()
+    return { x: r.left, y: r.top, w: r.width, h: r.height }
+  })
+  const cardCenterY = (await rectsOf()).card
+    ? (await rectsOf()).card.y + (await rectsOf()).card.h / 2
+    : 0
+  const canvasH = await page.evaluate(() => document.querySelector('dialog[open] .card-canvas').height)
+  const yPx = cardBox.y + (cardCenterY / canvasH) * cardBox.h
+
+  // 把卡牌拖到最右
+  await page.mouse.move(cardBox.x + cardBox.w * 0.25, yPx)
+  await page.mouse.down()
+  await page.mouse.move(cardBox.x + cardBox.w * 0.95, yPx, { steps: 16 })
+  await page.mouse.up()
+  await sleep(500)
+  const right = await rectsOf()
+
+  // 再拖到最左：起点必须落在卡牌当前中心（它已经在右侧）
+  const cvW = await page.evaluate(() => document.querySelector('dialog[open] .card-canvas').width)
+  const toCss = (p) => ({ x: cardBox.x + (p.x / cvW) * cardBox.w, y: cardBox.y + (p.y / canvasH) * cardBox.h })
+  const cur = toCss({ x: right.card.x + right.card.w / 2, y: right.card.y + right.card.h / 2 })
+  await page.mouse.move(cur.x, cur.y)
+  await page.mouse.down()
+  await page.mouse.move(cardBox.x + cardBox.w * 0.02, cur.y, { steps: 18 })
+  await page.mouse.up()
+  await sleep(500)
+  const left = await rectsOf()
+
+  const paper = right.poster
+  const gapRight = paper.x + paper.w - (right.card.x + right.card.w)
+  const gapLeft = left.card.x - paper.x
+  console.log(`   右边距=${gapRight.toFixed(1)} 左边距=${gapLeft.toFixed(1)} 卡牌宽=${right.card.w.toFixed(1)}`)
+
+  check('向右可贴到内边距（边距 ≈ 18×s，20–40px）', gapRight > 10 && gapRight < 45, `gap=${gapRight.toFixed(1)}`)
+  check('向左可贴到内边距（边距 ≈ 18×s，20–40px）', gapLeft > 10 && gapLeft < 45, `gap=${gapLeft.toFixed(1)}`)
+  check('任何一侧都没有越出相纸', right.card.x >= paper.x - 1 && left.card.x + left.card.w <= paper.x + paper.w + 1)
+
   console.log('6) 多格式导出')
   await page.evaluate(() => {
     window.__exports = []
