@@ -21,6 +21,26 @@ const canvasInfo = (page) =>
     return { w: c.width, h: c.height, hash: h, len: url.length }
   })
 
+const setFormat = async (page, label) => {
+  await page.evaluate(() => document.querySelector('dialog[open] .fmt-select .select-trigger').click())
+  await new Promise((r) => setTimeout(r, 150))
+  await page.evaluate((t) => {
+    const opt = [...document.querySelectorAll('dialog[open] .fmt-select .select-option')].find((o) => o.textContent.trim().startsWith(t))
+    opt?.click()
+  }, label)
+  await new Promise((r) => setTimeout(r, 200))
+}
+
+const setArtMode = async (page, label) => {
+  await page.evaluate(() => document.querySelector('dialog[open] .styled-select .select-trigger').click())
+  await new Promise((r) => setTimeout(r, 150))
+  await page.evaluate((t) => {
+    const opt = [...document.querySelectorAll('dialog[open] .styled-select .select-option')].find((o) => o.textContent.includes(t))
+    opt?.click()
+  }, label)
+  await new Promise((r) => setTimeout(r, 800))
+}
+
 try {
   if (!(await waitServer(BASE))) throw new Error('server not ready')
   const browser = await launchBrowser()
@@ -43,7 +63,7 @@ try {
   console.log('2) 预设画幅')
   const clickChip = async (label) => {
     await page.evaluate((t) => {
-      const btn = [...document.querySelectorAll('dialog[open] .chip')].find((b) => b.textContent.trim() === t)
+      const btn = [...document.querySelectorAll('dialog[open] .gs-pill')].find((b) => b.textContent.trim() === t)
       btn?.click()
     }, label)
     await page.waitForFunction(
@@ -100,6 +120,17 @@ try {
   const afterToggle = await canvasInfo(page)
   check('关闭元素图标后画面改变', afterToggle.hash !== afterGreeting.hash)
 
+  console.log('4b) 立绘来源：卡牌 / 海报 / 两者都放')
+  await setArtMode(page, '卡牌')
+  const modeCard = await canvasInfo(page)
+  check('卡牌模式改变画面', modeCard.hash !== afterToggle.hash, `${afterToggle.hash} → ${modeCard.hash}`)
+  await setArtMode(page, '两者都放')
+  const modeBoth = await canvasInfo(page)
+  check('两者都放改变画面（海报 + 卡牌插图）', modeBoth.hash !== modeCard.hash, `${modeCard.hash} → ${modeBoth.hash}`)
+  await setArtMode(page, '海报')
+  const modePoster = await canvasInfo(page)
+  check('切回海报与卡牌/两者均不同', modePoster.hash !== modeCard.hash && modePoster.hash !== modeBoth.hash)
+
   console.log('5) 立绘取景可调')
   await page.evaluate(() => {
     const ranges = [...document.querySelectorAll('dialog[open] .range input[type=range]')]
@@ -131,11 +162,7 @@ try {
 
   const exportBtn = () => page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('导出图片'))?.click())
 
-  await page.evaluate(() => {
-    const sel = document.querySelector('dialog[open] .sel')
-    sel.value = 'image/png'
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+  await setFormat(page, 'PNG')
   await exportBtn()
   await sleep(900)
   const png = await grab()
@@ -144,11 +171,7 @@ try {
   check('PNG 尺寸等于画幅 1080×1440', png && png.w === 1080 && png.h === 1440)
   check('文件名带角色与扩展名', png && /生日卡\.png$/.test(png.name), png?.name)
 
-  await page.evaluate(() => {
-    const sel = document.querySelector('dialog[open] .sel')
-    sel.value = 'image/jpeg'
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+  await setFormat(page, 'JPEG')
   await exportBtn()
   await sleep(900)
   const jpg = await grab()
@@ -167,11 +190,7 @@ try {
   check('2× 高清输出 2160×2880', hd && hd.w === 2160 && hd.h === 2880, hd ? `${hd.w}×${hd.h}` : '')
 
   console.log('7) 导出到拼图')
-  await page.evaluate(() => {
-    const sel = document.querySelector('dialog[open] .sel')
-    sel.value = 'image/png'
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+  await setFormat(page, 'PNG')
   await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('导出到拼图'))?.click())
   await page.waitForFunction(() => location.pathname === '/album', { timeout: 15000 })
   await sleep(1200)

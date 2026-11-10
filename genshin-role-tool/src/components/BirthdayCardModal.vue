@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import BirthdayCardCanvas from '@/components/BirthdayCardCanvas.vue'
+import StyledSelect from '@/components/StyledSelect.vue'
 import { useAlbumStore } from '@/stores/album'
 import { useToastStore } from '@/stores/toast'
 import { lockScroll, unlockScroll } from '@/utils/scrollLock'
@@ -30,6 +31,12 @@ const RATIOS = [
   { key: '4:3', label: '4:3', w: 1440, h: 1080 },
   { key: 'free', label: '自由', w: 1200, h: 1200 },
 ]
+const ART_MODES = [
+  { value: 'poster', label: '海报（竖版全身）' },
+  { value: 'card', label: '卡牌（方形头像）' },
+  { value: 'both', label: '两者都放（海报 + 卡牌插图）' },
+]
+const artMode = ref('poster')
 const ratio = ref('3:4')
 const size = reactive({ w: 1080, h: 1440 })
 
@@ -57,6 +64,7 @@ const art = reactive({ scale: 1, x: 0, y: 0 })
 const config = computed(() => ({
   width: size.w,
   height: size.h,
+  artMode: artMode.value,
   texts: { ...texts },
   show: { ...show },
   art: { ...art },
@@ -74,6 +82,7 @@ const TOGGLES = [
 
 function resetAll() {
   applyRatio('3:4')
+  artMode.value = 'poster'
   Object.assign(texts, {
     name: '',
     meta: '',
@@ -107,6 +116,11 @@ function onPointerUp() {
 }
 
 /* ---------- 导出 ---------- */
+const FORMAT_OPTIONS = [
+  { value: 'image/png', label: 'PNG' },
+  { value: 'image/jpeg', label: 'JPEG' },
+  { value: 'image/webp', label: 'WebP' },
+]
 const format = ref('image/png')
 const quality = ref(0.92)
 const hd = ref(false)
@@ -230,8 +244,8 @@ onBeforeUnmount(() => {
                   v-for="r in RATIOS"
                   :key="r.key"
                   type="button"
-                  class="chip"
-                  :class="{ on: ratio === r.key }"
+                  class="gs-pill"
+                  :class="{ 'is-on': ratio === r.key }"
                   @click="applyRatio(r.key)"
                 >
                   {{ r.label }}
@@ -248,6 +262,11 @@ onBeforeUnmount(() => {
                 </label>
                 <span class="ratio-note">{{ (size.w / size.h).toFixed(2) }} : 1</span>
               </div>
+            </section>
+
+            <section class="blk">
+              <h2>立绘来源</h2>
+              <StyledSelect v-model="artMode" :options="ART_MODES" label="立绘来源" hide-label />
             </section>
 
             <section class="blk">
@@ -305,11 +324,7 @@ onBeforeUnmount(() => {
             <section class="blk">
               <h2>导出</h2>
               <div class="row">
-                <select v-model="format" class="sel" aria-label="导出格式">
-                  <option value="image/png">PNG</option>
-                  <option value="image/jpeg">JPEG</option>
-                  <option value="image/webp">WebP</option>
-                </select>
+                <StyledSelect v-model="format" :options="FORMAT_OPTIONS" label="导出格式" hide-label compact class="fmt-select" />
                 <label class="toggle">
                   <input v-model="hd" type="checkbox" />
                   <span>2× 高清</span>

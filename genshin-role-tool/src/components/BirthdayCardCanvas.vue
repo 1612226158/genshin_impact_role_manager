@@ -21,6 +21,7 @@ const DEFAULTS = {
   texts: { name: '', meta: '', greeting: '', sign: '', footer: '原神角色工具 · 素材版权归 miHoYo 所有' },
   show: { icon: true, halo: true, stars: true, frame: true, meta: true, sign: true, footer: true },
   art: { scale: 1, x: 0, y: 0 },
+  artMode: 'poster',
 }
 
 const cfg = computed(() => {
@@ -31,16 +32,16 @@ const cfg = computed(() => {
     texts: { ...DEFAULTS.texts, ...(c.texts || {}) },
     show: { ...DEFAULTS.show, ...(c.show || {}) },
     art: { ...DEFAULTS.art, ...(c.art || {}) },
+    artMode: c.artMode || DEFAULTS.artMode,
   }
 })
 
-/** 卡片优先用竖版立绘（全身），没有立绘时退回头像大图 */
-function pickArt(c) {
+/** 立绘来源：海报取竖版全身图，卡牌取头像大图，两者都放则海报为主 + 卡牌插图 */
+function artSources(c) {
   const paintings = c.images?.paintings || []
-  if (paintings[0]?.file) return assetUrl(paintings[0].file)
-  if (c.images?.avatar_hd) return assetUrl(c.images.avatar_hd)
-  if (c.images?.avatar) return assetUrl(c.images.avatar)
-  return ''
+  const poster = paintings[0]?.file ? assetUrl(paintings[0].file) : ''
+  const card = c.images?.avatar_hd ? assetUrl(c.images.avatar_hd) : c.images?.avatar ? assetUrl(c.images.avatar) : ''
+  return { poster: poster || card, card: card || poster }
 }
 
 function autoMeta(c) {
@@ -160,50 +161,111 @@ async function draw() {
   const footerH = show.footer ? 64 * s : 24 * s
   const artTop = y + 24 * s
   const artBottom = h - footerH
+  const { poster, card } = artSources(c)
+  const mode = cfg.value.artMode || 'poster'
   const artInset = margin + 6 * s
-  const src = pickArt(c)
+  const boxW = w - artInset * 2
+  const boxH = Math.max(60, artBottom - artTop)
+  const radius = 24 * s
+  const scale = Math.max(0.2, art.scale || 1)
 
-  if (src) {
-    try {
-      const img = await loadImage(src)
+  // 白底相纸
+  ctx.save()
+  roundRect(ctx, artInset, artTop, boxW, boxH, radius)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.restore()
+
+  const roundClip = (x, y, rw, rh, r) => {
+    ctx.save()
+    roundRect(ctx, x, y, rw, rh, r)
+    ctx.clip()
+  }
+  const goldStroke = (x, y, rw, rh, r) => {
+    ctx.save()
+    roundRect(ctx, x + 1, y + 1, rw - 2, rh - 2, Math.max(1, r - 1))
+    ctx.strokeStyle = 'rgba(168, 130, 63, 0.55)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  try {
+    if (mode === 'card') {
+      // 卡牌：居中方形，cover 裁切，白边 + 投影
+      const src = await loadImage(card)
       if (version !== drawVersion) return
-      const boxW = w - artInset * 2
-      const boxH = Math.max(60, artBottom - artTop)
-      const radius = 24 * s
+      const side = Math.min(boxW, boxH) * 0.94
+      const x0 = w / 2 - side / 2 + (art.x || 0) * ((boxW - side) / 2)
+      const y0 = artTop + (boxH - side) / 2 + (art.y || 0) * ((boxH - side) / 2)
+      const k = (side / Math.min(src.width, src.height)) * scale
+      const dw = src.width * k
+      const dh = src.height * k
 
       ctx.save()
-      roundRect(ctx, artInset, artTop, boxW, boxH, radius)
+      ctx.shadowColor = 'rgba(120, 90, 40, 0.32)'
+      ctx.shadowBlur = 28 * s
+      ctx.shadowOffsetY = 10 * s
+      roundRect(ctx, x0, y0, side, side, radius)
       ctx.fillStyle = '#ffffff'
       ctx.fill()
       ctx.restore()
 
-      // 默认 contain（完整显示立绘），放大后才产生裁剪；再叠加用户的缩放与偏移
-      const base = Math.min(boxW / img.width, boxH / img.height)
-      const k = base * Math.max(0.2, art.scale || 1)
-      const dw = img.width * k
-      const dh = img.height * k
+      roundClip(x0, y0, side, side, radius)
+      ctx.drawImage(src, x0 + side / 2 - dw / 2, y0 + side / 2 - dh / 2, dw, dh)
+      ctx.restore()
+      goldStroke(x0, y0, side, side, radius)
+    } else {
+      // 海报（或两者都放的主图）：contain 完整显示，可缩放偏移
+      const src = await loadImage(poster)
+      if (version !== drawVersion) return
+      const base = Math.min(boxW / src.width, boxH / src.height)
+      const k = base * scale
+      const dw = src.width * k
+      const dh = src.height * k
       const cx = w / 2 + (art.x || 0) * (boxW / 2)
       const cy = artTop + boxH / 2 + (art.y || 0) * (boxH / 2)
 
-      ctx.save()
-      roundRect(ctx, artInset, artTop, boxW, boxH, radius)
-      ctx.clip()
-      ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh)
+      roundClip(artInset, artTop, boxW, boxH, radius)
+      ctx.drawImage(src, cx - dw / 2, cy - dh / 2, dw, dh)
       ctx.restore()
 
-      ctx.save()
-      roundRect(ctx, artInset + 1, artTop + 1, boxW - 2, boxH - 2, radius - 1)
-      ctx.strokeStyle = 'rgba(168, 130, 63, 0.55)'
-      ctx.lineWidth = 2
-      ctx.stroke()
-      ctx.restore()
-    } catch (err) {
-      if (version !== drawVersion) return
-      console.warn('[生日卡] 立绘绘制失败', err)
-      failed.value = true
-      drawNoArt(ctx, w, artTop, artBottom, s)
+      if (mode === 'both') {
+        // 卡牌插图叠在海报左下角
+        const inset = await loadImage(card)
+        if (version !== drawVersion) return
+        const cw = Math.min(boxW * 0.34, boxH * 0.36)
+        const px = artInset + 18 * s
+        const py = artTop + boxH - cw - 18 * s
+        const kk = cw / Math.min(inset.width, inset.height)
+        const iw = inset.width * kk
+        const ih = inset.height * kk
+
+        ctx.save()
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+        ctx.shadowBlur = 22 * s
+        ctx.shadowOffsetY = 6 * s
+        roundRect(ctx, px, py, cw, cw, radius * 0.7)
+        ctx.fillStyle = '#ffffff'
+        ctx.fill()
+        ctx.restore()
+
+        roundClip(px, py, cw, cw, radius * 0.7)
+        ctx.drawImage(inset, px + cw / 2 - iw / 2, py + cw / 2 - ih / 2, iw, ih)
+        ctx.restore()
+
+        ctx.save()
+        roundRect(ctx, px, py, cw, cw, radius * 0.7)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+        ctx.lineWidth = 5 * s
+        ctx.stroke()
+        ctx.restore()
+      }
+      goldStroke(artInset, artTop, boxW, boxH, radius)
     }
-  } else {
+  } catch (err) {
+    if (version !== drawVersion) return
+    console.warn('[生日卡] 立绘绘制失败', err)
     failed.value = true
     drawNoArt(ctx, w, artTop, artBottom, s)
   }

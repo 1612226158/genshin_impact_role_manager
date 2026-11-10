@@ -124,7 +124,7 @@ try {
   ))
   check('工坊内提供多格式导出与送拼图入口', await page.evaluate(() => {
     const dlg = document.querySelector('dialog.card-dialog[open]')
-    return Boolean(dlg?.querySelector('.sel')) &&
+    return Boolean(dlg?.querySelector('.fmt-select .select-trigger')) &&
       [...dlg.querySelectorAll('.gs-btn')].some((b) => b.textContent.includes('导出到拼图'))
   }))
   // 关闭工坊（不点导出到拼图，避免跳转相册丢失本月选择状态）

@@ -16,7 +16,19 @@ const selected = computed(() => props.options.find(o => String(o.value) === Stri
 const empty = computed(() => props.modelValue === '' || props.modelValue === null || props.modelValue === undefined)
 function show() {
   active.value = Math.max(0, props.options.findIndex(o => String(o.value) === String(props.modelValue)))
-  above.value = innerHeight - trigger.value.getBoundingClientRect().bottom < Math.min(260, props.options.length * 48)
+  const rect = trigger.value.getBoundingClientRect()
+  const listH = Math.min(260, props.options.length * 48)
+  // 只看视口会在弹窗/滚动面板里被判错：列表会被容器底边裁切。
+  // 这里取「最近的可滚动祖先」的可视底边，作为向上弹出的判据。
+  let bottomLimit = innerHeight
+  for (let el = root.value?.parentElement; el; el = el.parentElement) {
+    const style = getComputedStyle(el)
+    if (/(auto|scroll)/.test(style.overflowY)) {
+      bottomLimit = Math.min(bottomLimit, el.getBoundingClientRect().bottom)
+      break
+    }
+  }
+  above.value = bottomLimit - rect.bottom < listH
   open.value = true
 }
 function choose(i) {
