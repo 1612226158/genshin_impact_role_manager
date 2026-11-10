@@ -55,6 +55,12 @@ function applyRatio(key) {
   }
 }
 
+function stepSize(axis, delta) {
+  const next = Math.min(2400, Math.max(480, size[axis] + delta))
+  size[axis] = next
+  ratio.value = 'free'
+}
+
 function setFreeSize(axis, value) {
   const n = Math.min(2400, Math.max(480, Math.round(Number(value) || 0)))
   if (!n) return
@@ -312,8 +318,10 @@ onBeforeUnmount(() => {
             @pointerup="onPointerUp"
             @pointercancel="onPointerUp"
           >
-            <BirthdayCardCanvas v-if="character" ref="canvasRef" :character="character" :config="config" />
-            <p class="hint">拖拽海报或卡牌可分别调整取景（各自速率不同）· 也可用右侧滑块微调</p>
+            <div class="canvas-slot">
+              <BirthdayCardCanvas v-if="character" ref="canvasRef" :character="character" :config="config" />
+            </div>
+            <p class="hint">拖拽海报或卡牌调整取景（各自速率不同）· 也可用右侧滑块微调</p>
           </div>
 
           <aside class="controls" aria-label="卡片设置">
@@ -332,14 +340,32 @@ onBeforeUnmount(() => {
                 </button>
               </div>
               <div class="row sizes">
-                <label class="num">
-                  <span>宽</span>
-                  <input :value="size.w" type="number" min="480" max="2400" step="10" @change="setFreeSize('w', $event.target.value)" />
-                </label>
-                <label class="num">
-                  <span>高</span>
-                  <input :value="size.h" type="number" min="480" max="2400" step="10" @change="setFreeSize('h', $event.target.value)" />
-                </label>
+                <div class="stepper">
+                  <span class="st-label">宽</span>
+                  <button type="button" class="st-btn" aria-label="减小宽度" @click="stepSize('w', -10)">−</button>
+                  <input
+                    class="st-input"
+                    :value="size.w"
+                    type="text"
+                    inputmode="numeric"
+                    aria-label="画幅宽度"
+                    @change="setFreeSize('w', $event.target.value)"
+                  />
+                  <button type="button" class="st-btn" aria-label="增大宽度" @click="stepSize('w', 10)">＋</button>
+                </div>
+                <div class="stepper">
+                  <span class="st-label">高</span>
+                  <button type="button" class="st-btn" aria-label="减小高度" @click="stepSize('h', -10)">−</button>
+                  <input
+                    class="st-input"
+                    :value="size.h"
+                    type="text"
+                    inputmode="numeric"
+                    aria-label="画幅高度"
+                    @change="setFreeSize('h', $event.target.value)"
+                  />
+                  <button type="button" class="st-btn" aria-label="增大高度" @click="stepSize('h', 10)">＋</button>
+                </div>
                 <span class="ratio-note">{{ (size.w / size.h).toFixed(2) }} : 1</span>
               </div>
             </section>
@@ -553,9 +579,11 @@ onBeforeUnmount(() => {
 
 .preview {
   position: relative;
-  display: grid;
-  place-items: center;
-  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 22px 16px;
   background: radial-gradient(ellipse at 50% 30%, #14324a, #08161f 70%);
   overflow: hidden;
   cursor: grab;
@@ -572,15 +600,27 @@ onBeforeUnmount(() => {
   width: auto;
 }
 
+/* 提示改为画布下方的胶囊条：不压卡片边线，且底色保证可读性 */
+.canvas-slot {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .hint {
-  position: absolute;
-  bottom: 10px;
-  left: 0;
-  right: 0;
+  flex: 0 0 auto;
   margin: 0;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--gs-line);
+  background: rgba(6, 18, 26, 0.75);
+  color: rgba(238, 230, 214, 0.92);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
   text-align: center;
-  font-size: 11px;
-  color: rgba(226, 216, 196, 0.55);
 }
 
 .controls {
@@ -627,23 +667,65 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 
-.num {
+/* 画幅步进器：与全站输入框同一套描边/底色，自绘 −＋ 取代原生数字调节器 */
+.stepper {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--gs-ink-3);
+  gap: 4px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--gs-line-hi);
+  border-radius: 8px;
+  background: #10293d;
 }
 
-.num input {
-  width: 74px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  border: 1px solid var(--gs-line-hi);
-  background: #10293d;
-  color: var(--gs-ink);
-  font-size: 12px;
+.st-label {
+  font-size: 11.5px;
+  color: var(--gs-ink-3);
+  margin-right: 2px;
 }
+
+.st-btn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gs-ink-2);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.16s var(--gs-ease), color 0.16s var(--gs-ease), background 0.16s var(--gs-ease);
+}
+
+.st-btn:hover {
+  border-color: var(--gs-line-hi);
+  color: var(--gs-ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.st-input {
+  width: 54px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--gs-ink);
+  font-size: 12.5px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  outline: none;
+}
+
+.st-input::-webkit-outer-spin-button,
+.st-input::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 
 .ratio-note {
   font-size: 11.5px;

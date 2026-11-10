@@ -89,7 +89,7 @@ function layout(w, h, show) {
   // 字号随画幅等比缩放，保证不同比例下观感一致
   const s = Math.min(1.6, Math.max(0.5, Math.min(w / 1080, h / 1350)))
   const margin = Math.round(46 * s)
-  return { s, margin, footerH: show.footer ? 64 * s : 24 * s }
+  return { s, margin }
 }
 
 async function renderStatic(key, w, h, cfgV, c) {
@@ -188,7 +188,8 @@ async function renderStatic(key, w, h, cfgV, c) {
 
   // 白色相纸（立绘容器），文字区之外的部分
   const artTop = y + 24 * s
-  const artBottom = h - (show.footer ? 64 * s : 24 * s)
+  // 底部预留：内边距 + 页脚文字高度 + 间距，保证相纸不压住页脚
+  const artBottom = h - (show.footer ? margin + 46 * s : 20 * s)
   const artInset = margin + 6 * s
   const boxW = w - artInset * 2
   const boxH = Math.max(60, artBottom - artTop)
@@ -201,11 +202,14 @@ async function renderStatic(key, w, h, cfgV, c) {
   ctx.restore()
 
   if (show.footer) {
+    // 页脚画在相框内、相纸下方，基线留出内边距，避免压在金色边线上
+    const innerBottom = h - margin - 9 * s
+    const baseline = innerBottom - 18 * s
     ctx.textAlign = 'center'
-    ctx.fillStyle = 'rgba(120, 108, 92, 0.7)'
-    ctx.font = `400 ${Math.round(17 * s)}px "Noto Sans SC", "PingFang SC", sans-serif`
-    ctx.letterSpacing = '2px'
-    ctx.fillText(texts.footer || '', w / 2, h - 40 * s)
+    ctx.fillStyle = 'rgba(108, 96, 80, 0.9)'
+    ctx.font = `400 ${Math.round(16 * s)}px "Noto Sans SC", "PingFang SC", sans-serif`
+    ctx.letterSpacing = '1.5px'
+    ctx.fillText(texts.footer || '', w / 2, baseline)
     ctx.letterSpacing = '0px'
   }
 

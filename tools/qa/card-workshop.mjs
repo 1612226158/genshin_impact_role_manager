@@ -85,7 +85,7 @@ try {
 
   console.log('3) 自由比例')
   await page.evaluate(() => {
-    const inputs = [...document.querySelectorAll('dialog[open] .num input')]
+    const inputs = [...document.querySelectorAll('dialog[open] .st-input')]
     inputs[0].value = '1200'
     inputs[0].dispatchEvent(new Event('change', { bubbles: true }))
     inputs[1].value = '900'
@@ -492,6 +492,49 @@ try {
   await sleep(500)
   const after2 = await readAll()
   check('海报在上时，同一点拖的是海报', after2.h[0] !== before2.h[0] && after2.h[1] === before2.h[1], `海报水平 ${before2.h[0]} → ${after2.h[0]}；卡牌 ${before2.h[1]} → ${after2.h[1]}`)
+
+  console.log('6g) 画幅宽高用样式化步进器，提示条独立不压卡片')
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('重置版式'))?.click())
+  await sleep(500)
+
+  const ui = await page.evaluate(() => {
+    const dlg = document.querySelector('dialog[open]')
+    const hint = dlg.querySelector('.hint')
+    const cv = dlg.querySelector('.card-canvas')
+    const hr = hint.getBoundingClientRect()
+    const cr = cv.getBoundingClientRect()
+    return {
+      nativeNumber: dlg.querySelectorAll('input[type=number]').length,
+      steppers: dlg.querySelectorAll('.stepper').length,
+      hintBg: getComputedStyle(hint).backgroundColor,
+      hintOverlap: hr.top < cr.bottom - 1,
+      hintContrast: getComputedStyle(hint).color,
+    }
+  })
+  console.log('   ', JSON.stringify(ui))
+  check('画幅宽高不再使用原生数字输入框', ui.nativeNumber === 0)
+  check('使用两个样式化步进器（宽/高）', ui.steppers === 2)
+  check('提示条为胶囊底色（非透明裸字）', ui.hintBg !== 'rgba(0, 0, 0, 0)' && ui.hintBg !== 'transparent', ui.hintBg)
+  check('提示条不与画布重叠', ui.hintOverlap === false)
+
+  // 步进器：点 ＋ 后尺寸 +10，且画布随之变化
+  const beforeSize = await page.evaluate(() => {
+    const v = [...document.querySelectorAll('dialog[open] .st-input')].map((i) => Number(i.value))
+    return { w: v[0], h: v[1], cw: document.querySelector('dialog[open] .card-canvas').width }
+  })
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .stepper')][0].querySelectorAll('.st-btn')[1].click())
+  await sleep(500)
+  const afterSize = await page.evaluate(() => {
+    const v = [...document.querySelectorAll('dialog[open] .st-input')].map((i) => Number(i.value))
+    return { w: v[0], h: v[1], cw: document.querySelector('dialog[open] .card-canvas').width }
+  })
+  check('点 ＋ 宽度 +10', afterSize.w === beforeSize.w + 10, `${beforeSize.w} → ${afterSize.w}`)
+  check('画布宽度同步变化', afterSize.cw === afterSize.w, `canvas=${afterSize.cw} / 输入=${afterSize.w}`)
+
+  // 复位为 3:4，避免影响后续导出尺寸断言
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-pill')].find((b) => b.textContent.trim() === '3:4')?.click())
+  await sleep(500)
+
 
   console.log('6) 多格式导出')
   await page.evaluate(() => {
