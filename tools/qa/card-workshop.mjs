@@ -414,7 +414,7 @@ try {
   await sleep(500)
   const left = await rectsOf()
 
-  const paper = right.poster
+  const paper = right.paper
   const gapRight = paper.x + paper.w - (right.card.x + right.card.w)
   const gapLeft = left.card.x - paper.x
   console.log(`   右边距=${gapRight.toFixed(1)} 左边距=${gapLeft.toFixed(1)} 卡牌宽=${right.card.w.toFixed(1)}`)
@@ -422,6 +422,76 @@ try {
   check('向右可贴到内边距（边距 ≈ 18×s，20–40px）', gapRight > 10 && gapRight < 45, `gap=${gapRight.toFixed(1)}`)
   check('向左可贴到内边距（边距 ≈ 18×s，20–40px）', gapLeft > 10 && gapLeft < 45, `gap=${gapLeft.toFixed(1)}`)
   check('任何一侧都没有越出相纸', right.card.x >= paper.x - 1 && left.card.x + left.card.w <= paper.x + paper.w + 1)
+
+  console.log('6f) 上下层级：可切换谁压住谁，命中顺序随之改变')
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('重置版式'))?.click())
+  await sleep(500)
+  await setArtMode(page, '两者都放')
+  await sleep(600)
+  // 放大海报，让它覆盖到卡牌区域
+  await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .range input[type=range]')
+    r.value = '2'
+    r.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await sleep(700)
+
+  const clickStack = async (label) => {
+    await page.evaluate((t) => {
+      const btn = [...document.querySelectorAll('dialog[open] .gs-pill')].find((b) => b.textContent.trim() === t)
+      btn?.click()
+    }, label)
+    await sleep(700)
+  }
+
+  const hashOf = async () => {
+    const info = await canvasInfo(page)
+    return info.hash
+  }
+  const hCardTop = await hashOf()
+  await clickStack('海报在上')
+  const hPosterTop = await hashOf()
+  await clickStack('卡牌在上')
+  const hBack = await hashOf()
+  check('切换层级画面改变', hCardTop !== hPosterTop, `${hCardTop} → ${hPosterTop}`)
+  check('切回后画面还原（不累积副作用）', hBack === hCardTop, `${hPosterTop} → ${hBack}`)
+
+  const rectsNow = await page.evaluate(() => JSON.parse(document.querySelector('dialog[open] .card-canvas').dataset.rects || '{}'))
+  const cvBox3 = await page.evaluate(() => {
+    const c = document.querySelector('dialog[open] .card-canvas')
+    const r = c.getBoundingClientRect()
+    return { x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height }
+  })
+  const toPage = (pt) => ({ x: cvBox3.x + (pt.x / cvBox3.cw) * cvBox3.w, y: cvBox3.y + (pt.y / cvBox3.ch) * cvBox3.h })
+  const cardMid = toPage({ x: rectsNow.card.x + rectsNow.card.w / 2, y: rectsNow.card.y + rectsNow.card.h / 2 })
+
+  const readAll = () =>
+    page.evaluate(() => {
+      const t = [...document.querySelectorAll('dialog[open] .range span')].map((el) => el.textContent.trim())
+      const pick = (label) => t.filter((x) => x.startsWith(label)).map((x) => Number(x.match(/-?\d+/)[0]))
+      return { h: pick('水平'), v: pick('垂直') }
+    })
+
+  const before1 = await readAll()
+  await page.mouse.move(cardMid.x, cardMid.y)
+  await page.mouse.down()
+  await page.mouse.move(cardMid.x + 30, cardMid.y, { steps: 8 })
+  await page.mouse.up()
+  await sleep(500)
+  const after1 = await readAll()
+  check('卡牌在上时，点卡牌拖的是卡牌', after1.h[1] !== before1.h[1], `卡牌水平 ${before1.h[1]} → ${after1.h[1]}`)
+
+  await clickStack('海报在上')
+  const before2 = await readAll()
+  const rects2 = await page.evaluate(() => JSON.parse(document.querySelector('dialog[open] .card-canvas').dataset.rects || '{}'))
+  const mid2 = toPage({ x: rects2.card.x + rects2.card.w / 2, y: rects2.card.y + rects2.card.h / 2 })
+  await page.mouse.move(mid2.x, mid2.y)
+  await page.mouse.down()
+  await page.mouse.move(mid2.x + 30, mid2.y, { steps: 8 })
+  await page.mouse.up()
+  await sleep(500)
+  const after2 = await readAll()
+  check('海报在上时，同一点拖的是海报', after2.h[0] !== before2.h[0] && after2.h[1] === before2.h[1], `海报水平 ${before2.h[0]} → ${after2.h[0]}；卡牌 ${before2.h[1]} → ${after2.h[1]}`)
 
   console.log('6) 多格式导出')
   await page.evaluate(() => {

@@ -17,6 +17,8 @@ const rects = { poster: null, card: null }
 const effective = { art: { x: 0, y: 0 }, card: { x: 0, y: 0 } }
 /** 上一帧海报的尺寸度量：归一化可移动上限由它推导（不依赖重绘即可返回） */
 const metrics = { poster: null, card: null }
+/** 命中检测顺序：层级在上者优先 */
+let hitOrder = ['card', 'poster']
 const busy = ref(false)
 const failed = ref(false)
 let drawVersion = 0
@@ -44,6 +46,7 @@ const DEFAULTS = {
   art: { scale: 1, x: 0, y: 0 },
   card: { scale: 1, x: -1, y: 1 },
   artMode: 'poster',
+  stack: 'cardTop',
 }
 
 const cfg = computed(() => {
@@ -56,6 +59,7 @@ const cfg = computed(() => {
     art: { ...DEFAULTS.art, ...(c.art || {}) },
     card: { ...DEFAULTS.card, ...(c.card || {}) },
     artMode: c.artMode || DEFAULTS.artMode,
+    stack: c.stack || DEFAULTS.stack,
   }
 })
 
@@ -211,10 +215,12 @@ async function renderStatic(key, w, h, cfgV, c) {
 /* ---------------- 立绘层：每次拖动只重绘这一层 ---------------- */
 function drawArt(ctx, cfgV, L, posterImg, cardImg) {
   const { s, artTop, artInset, boxW, boxH, radius } = L
-  const { art, card: cardCfg, artMode } = cfgV
+  const { art, card: cardCfg, artMode, stack = 'cardTop' } = cfgV
   const scale = Math.max(0.2, art.scale || 1)
   rects.poster = null
   rects.card = null
+  // 相纸外框：海报命中区会随图片缩小，边界校验要用真正的相纸
+  rects.paper = { x: artInset, y: artTop, w: boxW, h: boxH }
 
   const roundClip = (x, y, rw, rh, r) => {
     ctx.save()
@@ -230,13 +236,13 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
     ctx.restore()
   }
 
+  /* ---- 单张卡牌：居中方形 ---- */
   if (artMode === 'card') {
     if (!cardImg) return
     const side = Math.min(boxW, boxH) * 0.94
-    // 位置映射天然落在相纸内部（x∈[-1,1] → [artInset, artInset+boxW-side]）
     const x0 = artInset + (boxW - side) / 2 + clamp(art.x || 0, -1, 1) * ((boxW - side) / 2)
     const y0 = artTop + (boxH - side) / 2 + clamp(art.y || 0, -1, 1) * ((boxH - side) / 2)
-    const k = side / Math.min(cardImg.width, cardImg.height) * scale
+    const k = (side / Math.min(cardImg.width, cardImg.height)) * scale
     const dw = cardImg.width * k
     const dh = cardImg.height * k
 
@@ -258,18 +264,18 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
     metrics.poster = { boxW: side, boxH: side, dw: side, dh: side }
     effective.art.x = art.x || 0
     effective.art.y = art.y || 0
+    hitOrder = ['poster', 'card']
     return
   }
 
   if (!posterImg) return
+
+  /* ---- 海报几何 ---- */
   const base = Math.min(boxW / posterImg.width, boxH / posterImg.height)
   const k = base * scale
   const dw = posterImg.width * k
   const dh = posterImg.height * k
-
-  // 位移限制采用「整块不许越出相纸」：
-  // 图片比相纸窄 → 可在相纸内左右滑动（另一侧留白）；
-  // 图片比相纸宽 → 只能在溢出范围内移动，避免露出空白边。
+  // 「整块不许越出相纸」：比相纸窄可滑动（另一侧留白），比相纸宽只在溢出范围内移动
   const maxX = Math.abs(boxW - dw) / 2
   const maxY = Math.abs(boxH - dh) / 2
   const offX = clamp((art.x || 0) * (boxW / 2), -maxX, maxX)
@@ -277,21 +283,24 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
   const cx = artInset + boxW / 2 + offX
   const cy = artTop + boxH / 2 + offY
 
-  roundClip(artInset, artTop, boxW, boxH, radius)
-  ctx.drawImage(posterImg, cx - dw / 2, cy - dh / 2, dw, dh)
-  ctx.restore()
-  rects.poster = { x: artInset, y: artTop, w: boxW, h: boxH }
-  metrics.poster = { boxW, boxH, dw, dh }
+  const paintPoster = () => {
+    roundClip(artInset, artTop, boxW, boxH, radius)
+    ctx.drawImage(posterImg, cx - dw / 2, cy - dh / 2, dw, dh)
+    ctx.restore()
+    // 命中区域取「图片与相纸的交集」：留白处不算海报，避免挡住卡牌
+    const ix = Math.max(artInset, cx - dw / 2)
+    const iy = Math.max(artTop, cy - dh / 2)
+    const ir = Math.min(artInset + boxW, cx + dw / 2)
+    const ib = Math.min(artTop + boxH, cy + dh / 2)
+    rects.poster = { x: ix, y: iy, w: Math.max(0, ir - ix), h: Math.max(0, ib - iy) }
+  }
 
-  effective.art.x = maxX ? offX / (boxW / 2) : 0
-  effective.art.y = maxY ? offY / (boxH / 2) : 0
-
-  if (artMode === 'both' && cardImg) {
+  const paintInset = () => {
+    if (!cardImg) return
     const m = 18 * s
     const baseCw = Math.min(boxW * 0.34, boxH * 0.36)
     const cw = baseCw * Math.max(0.4, cardCfg.scale || 1)
-    // 在「可用区间」内线性映射：-1 = 左/上边缘，+1 = 右/下边缘，0 = 居中。
-    // 之前以左下角为基准再加减半个余量，导致左侧越界、右侧永远到不了边。
+    // 在可用区间内线性映射：-1 贴左/上，+1 贴右/下，0 居中
     const spanX = Math.max(0, boxW - cw - m * 2)
     const spanY = Math.max(0, boxH - cw - m * 2)
     const px = artInset + m + ((clamp(cardCfg.x || 0, -1, 1) + 1) / 2) * spanX
@@ -313,7 +322,6 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
     ctx.drawImage(cardImg, px + cw / 2 - iw / 2, py + cw / 2 - ih / 2, iw, ih)
     ctx.restore()
 
-    // 白色衬边 + 金色细边，让卡牌与海报层次分明
     ctx.save()
     roundRect(ctx, px, py, cw, cw, radius * 0.7)
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)'
@@ -327,6 +335,24 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
     effective.card.x = cardCfg.x || 0
     effective.card.y = cardCfg.y || 0
   }
+
+  if (artMode === 'poster') {
+    paintPoster()
+    hitOrder = ['poster', 'card']
+  } else if (stack === 'posterTop') {
+    // 海报在上：先画卡牌，再压海报
+    paintInset()
+    paintPoster()
+    hitOrder = ['poster', 'card']
+  } else {
+    paintPoster()
+    paintInset()
+    hitOrder = ['card', 'poster']
+  }
+
+  metrics.poster = { boxW, boxH, dw, dh }
+  effective.art.x = maxX ? offX / (boxW / 2) : 0
+  effective.art.y = maxY ? offY / (boxH / 2) : 0
 }
 
 async function draw() {
@@ -381,8 +407,7 @@ async function draw() {
 
   drawArt(ctx, cfgV, L, posterImg, cardImg)
   canvas.dataset.draws = String(drawCount)
-  canvas.dataset.rects = JSON.stringify({ poster: rects.poster, card: rects.card })
-  canvas.dataset.rects = JSON.stringify({ poster: rects.poster, card: rects.card })
+  canvas.dataset.rects = JSON.stringify({ poster: rects.poster, card: rects.card, paper: rects.paper })
   busy.value = false
 }
 
@@ -402,10 +427,10 @@ async function exportBlob({ type = 'image/png', quality = 0.92, scale = 1 } = {}
 
 /** 命中测试：返回 'poster' | 'card' | null（参数为画布坐标） */
 function hitTest(x, y) {
-  const c = rects.card
-  if (c && x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return 'card'
-  const p = rects.poster
-  if (p && x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h) return 'poster'
+  for (const target of hitOrder) {
+    const r = rects[target]
+    if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return target
+  }
   return null
 }
 
@@ -478,7 +503,8 @@ function scheduleDebounced() {
 
 const signature = (v) => ({
   text: JSON.stringify([v.texts, v.show, v.artMode, props.character?.id]),
-  geom: JSON.stringify([v.width, v.height, v.art, v.card]),
+  // stack 影响绘制顺序与命中顺序，必须参与几何签名，否则切换层级不重绘
+  geom: JSON.stringify([v.width, v.height, v.art, v.card, v.stack]),
 })
 
 watch(

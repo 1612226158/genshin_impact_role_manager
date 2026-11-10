@@ -37,6 +37,12 @@ const ART_MODES = [
   { value: 'both', label: '两者都放（海报 + 卡牌插图）' },
 ]
 const artMode = ref('poster')
+/* 两者都放时的上下层级：cardTop = 卡牌压在海报上（默认） */
+const stack = ref('cardTop')
+const STACKS = [
+  { value: 'cardTop', label: '卡牌在上' },
+  { value: 'posterTop', label: '海报在上' },
+]
 const ratio = ref('3:4')
 const size = reactive({ w: 1080, h: 1440 })
 
@@ -68,6 +74,7 @@ const config = computed(() => ({
   width: size.w,
   height: size.h,
   artMode: artMode.value,
+  stack: stack.value,
   texts: { ...texts },
   show: { ...show },
   art: { ...art },
@@ -87,6 +94,7 @@ const TOGGLES = [
 function resetAll() {
   applyRatio('3:4')
   artMode.value = 'poster'
+  stack.value = 'cardTop'
   Object.assign(texts, {
     name: '',
     meta: '',
@@ -339,6 +347,23 @@ onBeforeUnmount(() => {
             <section class="blk">
               <h2>立绘来源</h2>
               <StyledSelect v-model="artMode" :options="ART_MODES" label="立绘来源" hide-label />
+            </section>
+
+            <section v-if="artMode === 'both'" class="blk">
+              <h2>上下层级</h2>
+              <div class="row">
+                <button
+                  v-for="s2 in STACKS"
+                  :key="s2.value"
+                  type="button"
+                  class="gs-pill"
+                  :class="{ 'is-on': stack === s2.value }"
+                  @click="stack = s2.value"
+                >
+                  {{ s2.label }}
+                </button>
+              </div>
+              <p class="stack-note">层级决定谁压住谁，也决定拖拽时优先选中谁。</p>
             </section>
 
             <section class="blk">
@@ -622,6 +647,20 @@ onBeforeUnmount(() => {
 
 .ratio-note {
   font-size: 11.5px;
+  color: var(--gs-ink-3);
+}
+
+.stack-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--gs-ink-3);
+}
+
+.stack-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
   color: var(--gs-ink-3);
 }
 
