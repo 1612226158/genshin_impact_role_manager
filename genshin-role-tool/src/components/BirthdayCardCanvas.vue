@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { assetUrl } from '@/utils/asset'
 import { elementColor, elementIcon } from '@/utils/element'
 import { canvasToBlob, drawStars, loadImage, mix, rgba, roundRect, wrapText } from '@/utils/canvas'
@@ -18,6 +18,8 @@ const effective = { art: { x: 0, y: 0 }, card: { x: 0, y: 0 } }
 const busy = ref(false)
 const failed = ref(false)
 let drawVersion = 0
+/* 实际执行的绘制次数：拖动时应远少于 pointermove 次数 */
+let drawCount = 0
 
 /** 图片缓存：避免每次拖动都重新 new Image 解码（那正是闪烁的根源） */
 const imgCache = new Map()
@@ -323,6 +325,7 @@ async function draw() {
   if (!canvas || !c) return
 
   const version = ++drawVersion
+  drawCount += 1
   const cfgV = cfg.value
   const { width: wpx, height: hpx } = cfgV
   const { poster, card } = artSources(c)
@@ -367,6 +370,7 @@ async function draw() {
   if (version !== drawVersion) return
 
   drawArt(ctx, cfgV, L, posterImg, cardImg)
+  canvas.dataset.draws = String(drawCount)
   busy.value = false
 }
 
@@ -402,6 +406,7 @@ defineExpose({
   hitTest,
   rectOf,
   effectiveOffsets,
+  drawCount: () => drawCount,
   dims: () => ({ width: cfg.value.width, height: cfg.value.height }),
 })
 
@@ -410,9 +415,60 @@ onMounted(async () => {
   draw()
 })
 
+onBeforeUnmount(() => {
+  cancelAnimationFrame(rafId)
+  clearTimeout(textTimer)
+})
+
+/* ---------------- 绘制调度：几何按帧合并，文本防抖 ---------------- */
+let rafId = 0
+let textTimer = 0
+const TEXT_DEBOUNCE_MS = 160
+
+function runDraw() {
+  if (rafId) {
+    cancelAnimationFrame(rafId)
+    rafId = 0
+  }
+  draw()
+}
+
+function scheduleFrame() {
+  if (rafId) return
+  rafId = requestAnimationFrame(() => {
+    rafId = 0
+    draw()
+  })
+}
+
+function scheduleDebounced() {
+  clearTimeout(textTimer)
+  textTimer = setTimeout(() => {
+    textTimer = 0
+    runDraw()
+  }, TEXT_DEBOUNCE_MS)
+}
+
+const signature = (v) => ({
+  text: JSON.stringify([v.texts, v.show, v.artMode, props.character?.id]),
+  geom: JSON.stringify([v.width, v.height, v.art, v.card]),
+})
+
 watch(
-  () => [props.character?.id, JSON.stringify(cfg.value)],
-  () => draw()
+  () => cfg.value,
+  (next, prev) => {
+    if (!prev) {
+      runDraw()
+      return
+    }
+    const a = signature(next)
+    const b = signature(prev)
+    // 拖动/滑块/画幅：合并到下一帧，最多一帧一次，保持实时手感
+    if (a.geom !== b.geom) scheduleFrame()
+    // 打字：真正防抖，避免每个字符都重建静态层
+    if (a.text !== b.text) scheduleDebounced()
+  },
+  { deep: false }
 )
 </script>
 

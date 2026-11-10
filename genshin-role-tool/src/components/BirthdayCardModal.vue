@@ -125,19 +125,41 @@ function onPointerDown(e) {
     w: area?.w || cv.width,
     h: area?.h || cv.height,
   }
-  previewRef.value.setPointerCapture?.(e.pointerId)
+  try {
+    previewRef.value.setPointerCapture?.(e.pointerId)
+  } catch {
+    /* 合成事件可能没有有效 pointerId */
+  }
   e.preventDefault()
 }
 
+let moveFrame = 0
+let pendingMove = null
+
 function onPointerMove(e) {
   if (!drag) return
-  const store = drag.target === 'card' ? cardArt : art
   const dx = ((e.clientX - drag.startX) * drag.cssScale) / (drag.w / 2)
   const dy = ((e.clientY - drag.startY) * drag.cssScale) / (drag.h / 2)
-  store.x = clamp1(drag.ox + dx)
-  store.y = clamp1(drag.oy + dy)
+  pendingMove = { x: clamp1(drag.ox + dx), y: clamp1(drag.oy + dy) }
+  // 一帧只回写一次状态：pointermove 可达 120Hz，逐次写会连带触发侧栏重渲染
+  if (moveFrame) return
+  moveFrame = requestAnimationFrame(() => {
+    moveFrame = 0
+    if (!drag || !pendingMove) return
+    const store = drag.target === 'card' ? cardArt : art
+    store.x = pendingMove.x
+    store.y = pendingMove.y
+    pendingMove = null
+  })
 }
 function onPointerUp() {
+  // 抬手先落定尚未提交的最后一帧，避免 rAF 未执行就结束导致丢失末次位移
+  if (drag && pendingMove) {
+    const store = drag.target === 'card' ? cardArt : art
+    store.x = pendingMove.x
+    store.y = pendingMove.y
+    pendingMove = null
+  }
   // 画布会按相纸边界夹紧位移，这里把生效值同步回状态，
   // 否则滑块会停在越界值上，回拖时出现「死区」
   if (drag && canvasRef.value?.effectiveOffsets) {
@@ -238,6 +260,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  cancelAnimationFrame(moveFrame)
   if (dialog.value?.open) unlockScroll()
 })
 </script>

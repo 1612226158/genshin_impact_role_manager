@@ -277,6 +277,60 @@ try {
     return !(d[0] === 255 && d[1] === 255 && d[2] === 255)
   }))
 
+  console.log('6c) 绘制节流：一次拖动只按帧重绘，文本输入走防抖')
+  const drawsOf = () =>
+    page.evaluate(() => Number(document.querySelector('dialog[open] .card-canvas')?.dataset.draws || 0))
+
+  // 先重置并制造可拖动余量，确保位移真的发生变化
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('重置版式'))?.click())
+  await sleep(600)
+  await setArtMode(page, '两者都放')
+  await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .range input[type=range]')
+    r.value = '1.6'
+    r.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await sleep(500)
+
+  // 先重置，保证缩放从 100% 起变化
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('重置版式'))?.click())
+  await sleep(600)
+
+  const readLabel = () => page.evaluate(() => [...document.querySelectorAll('dialog[open] .range span')][0]?.textContent.trim())
+  const d0 = await drawsOf()
+  const label0 = await readLabel()
+  // 在同一个 JS 任务里连发 30 次状态变更（滑块 input 会同步触发 Vue 响应式）
+  await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .range input[type=range]')
+    for (let i = 1; i <= 30; i += 1) {
+      r.value = String(1 + i * 0.02)
+      r.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+  })
+  await sleep(200)
+  const d1 = await drawsOf()
+  const label1 = await readLabel()
+  console.log(`   ${label0} → ${label1}；同任务 30 次变更 → 实际重绘 ${d1 - d0} 次`)
+  check('状态确实发生了变化', label0 !== label1, `${label0} → ${label1}`)
+  check('同任务高频变更被合并（重绘 1–3 次）', d1 - d0 >= 1 && d1 - d0 <= 3, `draws=${d1 - d0}`)
+
+  // 文本输入防抖：连续输入后的 50ms 内不应重绘，250ms 后应重绘
+  const d2 = await drawsOf()
+  await page.evaluate(() => {
+    const ta = document.querySelector('dialog[open] textarea')
+    for (let i = 0; i < 6; i += 1) {
+      ta.value = '连续输入测试' + 'x'.repeat(i + 1)
+      ta.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+  })
+  await sleep(60)
+  const d3 = await drawsOf()
+  check('输入期间 60ms 内没有重绘（防抖生效）', d3 === d2, `${d2} → ${d3}`)
+
+  await sleep(320)
+  const d4 = await drawsOf()
+  check('防抖窗口结束后执行了一次重绘', d4 === d2 + 1, `${d3} → ${d4}`)
+
   console.log('6) 多格式导出')
   await page.evaluate(() => {
     window.__exports = []
