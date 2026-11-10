@@ -11,6 +11,8 @@ const props = defineProps({
 })
 
 const canvasRef = ref(null)
+/** 最近一次绘制出的可拖拽区域（画布坐标），用于判断拖的是海报还是卡牌 */
+const rects = { poster: null, card: null }
 const busy = ref(false)
 const failed = ref(false)
 let drawVersion = 0
@@ -21,6 +23,7 @@ const DEFAULTS = {
   texts: { name: '', meta: '', greeting: '', sign: '', footer: '原神角色工具 · 素材版权归 miHoYo 所有' },
   show: { icon: true, halo: true, stars: true, frame: true, meta: true, sign: true, footer: true },
   art: { scale: 1, x: 0, y: 0 },
+  card: { scale: 1, x: 0, y: 0 },
   artMode: 'poster',
 }
 
@@ -32,6 +35,7 @@ const cfg = computed(() => {
     texts: { ...DEFAULTS.texts, ...(c.texts || {}) },
     show: { ...DEFAULTS.show, ...(c.show || {}) },
     art: { ...DEFAULTS.art, ...(c.art || {}) },
+    card: { ...DEFAULTS.card, ...(c.card || {}) },
     artMode: c.artMode || DEFAULTS.artMode,
   }
 })
@@ -58,7 +62,9 @@ async function draw() {
   if (!canvas || !c) return
 
   const version = ++drawVersion
-  const { width: w, height: h, texts, show, art } = cfg.value
+  const { width: w, height: h, texts, show, art, card: cardCfg } = cfg.value
+  rects.poster = null
+  rects.card = null
   canvas.width = w
   canvas.height = h
 
@@ -215,6 +221,7 @@ async function draw() {
       ctx.drawImage(src, x0 + side / 2 - dw / 2, y0 + side / 2 - dh / 2, dw, dh)
       ctx.restore()
       goldStroke(x0, y0, side, side, radius)
+      rects.poster = { x: x0, y: y0, w: side, h: side }
     } else {
       // 海报（或两者都放的主图）：contain 完整显示，可缩放偏移
       const src = await loadImage(poster)
@@ -229,14 +236,17 @@ async function draw() {
       roundClip(artInset, artTop, boxW, boxH, radius)
       ctx.drawImage(src, cx - dw / 2, cy - dh / 2, dw, dh)
       ctx.restore()
+      rects.poster = { x: artInset, y: artTop, w: boxW, h: boxH }
 
       if (mode === 'both') {
-        // 卡牌插图叠在海报左下角
+        // 卡牌插图：基准位在左下角，可独立缩放与位移（与海报互不影响）
         const inset = await loadImage(card)
         if (version !== drawVersion) return
-        const cw = Math.min(boxW * 0.34, boxH * 0.36)
-        const px = artInset + 18 * s
-        const py = artTop + boxH - cw - 18 * s
+        const baseCw = Math.min(boxW * 0.34, boxH * 0.36)
+        const cw = baseCw * Math.max(0.4, cardCfg.scale || 1)
+        const px = artInset + 18 * s + (cardCfg.x || 0) * ((boxW - cw) / 2)
+        const py = artTop + boxH - cw - 18 * s + (cardCfg.y || 0) * ((boxH - cw) / 2)
+        rects.card = { x: px, y: py, w: cw, h: cw }
         const kk = cw / Math.min(inset.width, inset.height)
         const iw = inset.width * kk
         const ih = inset.height * kk
@@ -303,9 +313,22 @@ async function exportBlob({ type = 'image/png', quality = 0.92, scale = 1 } = {}
   return canvasToBlob(out, type, quality)
 }
 
+/** 命中测试：返回 'poster' | 'card' | null（参数为画布坐标） */
+function hitTest(x, y) {
+  const c = rects.card
+  if (c && x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return 'card'
+  const p = rects.poster
+  if (p && x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h) return 'poster'
+  return null
+}
+
+const rectOf = (target) => rects[target] || null
+
 defineExpose({
   exportBlob,
   redraw: draw,
+  hitTest,
+  rectOf,
   dims: () => ({ width: cfg.value.width, height: cfg.value.height }),
 })
 

@@ -60,6 +60,8 @@ function setFreeSize(axis, value) {
 const texts = reactive({ name: '', meta: '', greeting: '', sign: '', footer: '原神角色工具 · 素材版权归 miHoYo 所有' })
 const show = reactive({ icon: true, halo: true, stars: true, frame: true, meta: true, sign: true, footer: true })
 const art = reactive({ scale: 1, x: 0, y: 0 })
+/* 「两者都放」时卡牌插图的独立取景 */
+const cardArt = reactive({ scale: 1, x: 0, y: 0 })
 
 const config = computed(() => ({
   width: size.w,
@@ -68,6 +70,7 @@ const config = computed(() => ({
   texts: { ...texts },
   show: { ...show },
   art: { ...art },
+  card: { ...cardArt },
 }))
 
 const TOGGLES = [
@@ -92,24 +95,47 @@ function resetAll() {
   })
   Object.assign(show, { icon: true, halo: true, stars: true, frame: true, meta: true, sign: true, footer: true })
   Object.assign(art, { scale: 1, x: 0, y: 0 })
+  Object.assign(cardArt, { scale: 1, x: 0, y: 0 })
   toast.push('已重置为默认版式')
 }
 
 /* ---------- 立绘取景：拖拽 + 滑块 ---------- */
 let drag = null
+const clamp1 = (v) => Math.max(-1, Math.min(1, +v.toFixed(3)))
+
 function onPointerDown(e) {
-  const box = previewRef.value?.getBoundingClientRect()
-  if (!box) return
-  drag = { x: e.clientX, y: e.clientY, ax: art.x, ay: art.y, w: box.width, h: box.height }
+  const cv = previewRef.value?.querySelector('canvas')
+  if (!cv || !canvasRef.value?.hitTest) return
+  const rect = cv.getBoundingClientRect()
+  const cssScale = cv.width / rect.width
+  const cx = (e.clientX - rect.left) * cssScale
+  const cy = (e.clientY - rect.top) * cssScale
+  // 卡牌插图优先命中：它叠在海报之上
+  const target = canvasRef.value.hitTest(cx, cy) || 'poster'
+  const area = canvasRef.value.rectOf(target)
+  const store = target === 'card' ? cardArt : art
+  drag = {
+    target,
+    startX: e.clientX,
+    startY: e.clientY,
+    ox: store.x,
+    oy: store.y,
+    cssScale,
+    // 归一化基准取各自区域尺寸：卡牌更小，同一手势下相对位移更大（速率不同）
+    w: area?.w || cv.width,
+    h: area?.h || cv.height,
+  }
   previewRef.value.setPointerCapture?.(e.pointerId)
   e.preventDefault()
 }
+
 function onPointerMove(e) {
   if (!drag) return
-  const dx = (e.clientX - drag.x) / (drag.w / 2)
-  const dy = (e.clientY - drag.y) / (drag.h / 2)
-  art.x = Math.max(-1, Math.min(1, +(drag.ax + dx).toFixed(3)))
-  art.y = Math.max(-1, Math.min(1, +(drag.ay + dy).toFixed(3)))
+  const store = drag.target === 'card' ? cardArt : art
+  const dx = ((e.clientX - drag.startX) * drag.cssScale) / (drag.w / 2)
+  const dy = ((e.clientY - drag.startY) * drag.cssScale) / (drag.h / 2)
+  store.x = clamp1(drag.ox + dx)
+  store.y = clamp1(drag.oy + dy)
 }
 function onPointerUp() {
   drag = null
@@ -233,7 +259,7 @@ onBeforeUnmount(() => {
             @pointercancel="onPointerUp"
           >
             <BirthdayCardCanvas v-if="character" ref="canvasRef" :character="character" :config="config" />
-            <p class="hint">拖拽调整立绘取景 · 缩放与位置也可用右侧滑块微调</p>
+            <p class="hint">拖拽海报或卡牌可分别调整取景（各自速率不同）· 也可用右侧滑块微调</p>
           </div>
 
           <aside class="controls" aria-label="卡片设置">
@@ -271,18 +297,57 @@ onBeforeUnmount(() => {
 
             <section class="blk">
               <h2>立绘取景</h2>
-              <label class="range">
-                <span>缩放 {{ Math.round(art.scale * 100) }}%</span>
-                <input v-model.number="art.scale" type="range" min="0.6" max="2" step="0.02" />
-              </label>
-              <label class="range">
-                <span>水平 {{ Math.round(art.x * 100) }}</span>
-                <input v-model.number="art.x" type="range" min="-1" max="1" step="0.02" />
-              </label>
-              <label class="range">
-                <span>垂直 {{ Math.round(art.y * 100) }}</span>
-                <input v-model.number="art.y" type="range" min="-1" max="1" step="0.02" />
-              </label>
+
+              <!-- 海报（或单张卡牌）取景 -->
+              <template v-if="artMode !== 'card'">
+                <p v-if="artMode === 'both'" class="sub-title">海报</p>
+                <label class="range">
+                  <span>缩放 {{ Math.round(art.scale * 100) }}%</span>
+                  <input v-model.number="art.scale" type="range" min="0.6" max="2" step="0.02" />
+                </label>
+                <label class="range">
+                  <span>水平 {{ Math.round(art.x * 100) }}</span>
+                  <input v-model.number="art.x" type="range" min="-1" max="1" step="0.02" />
+                </label>
+                <label class="range">
+                  <span>垂直 {{ Math.round(art.y * 100) }}</span>
+                  <input v-model.number="art.y" type="range" min="-1" max="1" step="0.02" />
+                </label>
+              </template>
+
+              <!-- 卡牌：两种放置方式共用「卡牌」这组标题 -->
+              <template v-if="artMode === 'card'">
+                <p class="sub-title">卡牌</p>
+                <label class="range">
+                  <span>缩放 {{ Math.round(art.scale * 100) }}%</span>
+                  <input v-model.number="art.scale" type="range" min="0.6" max="2" step="0.02" />
+                </label>
+                <label class="range">
+                  <span>水平 {{ Math.round(art.x * 100) }}</span>
+                  <input v-model.number="art.x" type="range" min="-1" max="1" step="0.02" />
+                </label>
+                <label class="range">
+                  <span>垂直 {{ Math.round(art.y * 100) }}</span>
+                  <input v-model.number="art.y" type="range" min="-1" max="1" step="0.02" />
+                </label>
+              </template>
+
+              <!-- 两者都放：卡牌插图独立取景 -->
+              <template v-if="artMode === 'both'">
+                <p class="sub-title">卡牌插图</p>
+                <label class="range">
+                  <span>缩放 {{ Math.round(cardArt.scale * 100) }}%</span>
+                  <input v-model.number="cardArt.scale" type="range" min="0.4" max="1.8" step="0.02" />
+                </label>
+                <label class="range">
+                  <span>水平 {{ Math.round(cardArt.x * 100) }}</span>
+                  <input v-model.number="cardArt.x" type="range" min="-1" max="1" step="0.02" />
+                </label>
+                <label class="range">
+                  <span>垂直 {{ Math.round(cardArt.y * 100) }}</span>
+                  <input v-model.number="cardArt.y" type="range" min="-1" max="1" step="0.02" />
+                </label>
+              </template>
             </section>
 
             <section class="blk">
@@ -512,6 +577,13 @@ onBeforeUnmount(() => {
 .ratio-note {
   font-size: 11.5px;
   color: var(--gs-ink-3);
+}
+
+.sub-title {
+  margin: 2px 0 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--gs-gold);
 }
 
 .range {

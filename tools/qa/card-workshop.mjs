@@ -141,6 +141,58 @@ try {
   const afterZoom = await canvasInfo(page)
   check('缩放立绘后画面改变', afterZoom.hash !== afterToggle.hash)
 
+  console.log('5b) 两者都放：海报与卡牌可分别拖拽，速率不同')
+  await setArtMode(page, '两者都放')
+  const readOffsets = () =>
+    page.evaluate(() => {
+      const labels = [...document.querySelectorAll('dialog[open] .range')].map((l) => l.querySelector('span').textContent.trim())
+      const num = (prefix) => {
+        const hit = labels.find((t) => t.startsWith(prefix))
+        const m = hit && hit.match(/-?\d+/)
+        return m ? Number(m[0]) : null
+      }
+      return { poster: num('水平'), card: num('卡牌') ?? num('水平') }
+    })
+
+  const cvRect = await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .card-canvas').getBoundingClientRect()
+    return { x: r.left, y: r.top, w: r.width, h: r.height }
+  })
+
+  // 拖拽左下角的卡牌插图
+  const beforeDrag = await page.evaluate(() => {
+    const vals = [...document.querySelectorAll('dialog[open] .range span')].map((s) => s.textContent.trim())
+    return vals.filter((t) => t.startsWith('水平')).map((t) => Number(t.match(/-?\d+/)[0]))
+  })
+  const cardStart = { x: cvRect.x + cvRect.w * 0.25, y: cvRect.y + cvRect.h * 0.8 }
+  await page.mouse.move(cardStart.x, cardStart.y)
+  await page.mouse.down()
+  await page.mouse.move(cardStart.x + 40, cardStart.y, { steps: 8 })
+  await page.mouse.up()
+  await sleep(600)
+  const afterCard = await page.evaluate(() => {
+    const vals = [...document.querySelectorAll('dialog[open] .range span')].map((s) => s.textContent.trim())
+    return vals.filter((t) => t.startsWith('水平')).map((t) => Number(t.match(/-?\d+/)[0]))
+  })
+  check('拖卡牌只移动卡牌插图', afterCard[1] !== beforeDrag[1] && afterCard[0] === beforeDrag[0], `${beforeDrag} → ${afterCard}`)
+
+  // 拖拽海报中部
+  const posterStart = { x: cvRect.x + cvRect.w * 0.5, y: cvRect.y + cvRect.h * 0.45 }
+  await page.mouse.move(posterStart.x, posterStart.y)
+  await page.mouse.down()
+  await page.mouse.move(posterStart.x + 40, posterStart.y, { steps: 8 })
+  await page.mouse.up()
+  await sleep(600)
+  const afterPoster = await page.evaluate(() => {
+    const vals = [...document.querySelectorAll('dialog[open] .range span')].map((s) => s.textContent.trim())
+    return vals.filter((t) => t.startsWith('水平')).map((t) => Number(t.match(/-?\d+/)[0]))
+  })
+  check('拖海报只移动海报', afterPoster[0] !== afterCard[0] && afterPoster[1] === afterCard[1], `${afterCard} → ${afterPoster}`)
+
+  const cardDelta = Math.abs(afterCard[1] - beforeDrag[1])
+  const posterDelta = Math.abs(afterPoster[0] - beforeDrag[0])
+  check('同一手势下卡牌位移幅度大于海报（速率不同）', cardDelta > posterDelta * 1.5, `card=${cardDelta} poster=${posterDelta}`)
+
   console.log('6) 多格式导出')
   await page.evaluate(() => {
     window.__exports = []
