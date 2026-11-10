@@ -331,6 +331,51 @@ try {
   const d4 = await drawsOf()
   check('防抖窗口结束后执行了一次重绘', d4 === d2 + 1, `${d3} → ${d4}`)
 
+  console.log('6d) 海报拖动回归：默认可横向、放大后可纵向（修复「完全拖不动」）')
+  await page.evaluate(() => [...document.querySelectorAll('dialog[open] .gs-btn')].find((b) => b.textContent.includes('重置版式'))?.click())
+  await sleep(600)
+
+  const readHV = () =>
+    page.evaluate(() => {
+      const t = [...document.querySelectorAll('dialog[open] .range span')].map((el) => el.textContent.trim())
+      const num = (label) => {
+        const hit = t.find((x) => x.startsWith(label))
+        return hit ? Number(hit.match(/-?\d+/)[0]) : null
+      }
+      return { h: num('水平'), v: num('垂直') }
+    })
+
+  const canvasBox = await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .card-canvas').getBoundingClientRect()
+    return { x: r.left, y: r.top, w: r.width, h: r.height }
+  })
+  const mid = { x: canvasBox.x + canvasBox.w * 0.5, y: canvasBox.y + canvasBox.h * 0.45 }
+
+  const baseHV = await readHV()
+  await page.mouse.move(mid.x, mid.y)
+  await page.mouse.down()
+  await page.mouse.move(mid.x + 60, mid.y, { steps: 10 })
+  await page.mouse.up()
+  await sleep(400)
+  const afterH = await readHV()
+  check('默认缩放下海报可水平拖动', afterH.h !== baseHV.h && afterH.h !== 0, `水平 ${baseHV.h} → ${afterH.h}`)
+  check('默认缩放下纵向无余量（图片等高，锁死）', afterH.v === 0, `垂直=${afterH.v}`)
+
+  await page.evaluate(() => {
+    const r = document.querySelector('dialog[open] .range input[type=range]')
+    r.value = '2'
+    r.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await sleep(700)
+  const zoomed = await readHV()
+  await page.mouse.move(mid.x, mid.y)
+  await page.mouse.down()
+  await page.mouse.move(mid.x, mid.y + 80, { steps: 10 })
+  await page.mouse.up()
+  await sleep(400)
+  const afterV = await readHV()
+  check('放大后海报可纵向拖动（此前被回写清零）', afterV.v !== zoomed.v && afterV.v !== 0, `垂直 ${zoomed.v} → ${afterV.v}`)
+
   console.log('6) 多格式导出')
   await page.evaluate(() => {
     window.__exports = []

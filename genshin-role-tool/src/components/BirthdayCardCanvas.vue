@@ -15,6 +15,8 @@ const canvasRef = ref(null)
 const rects = { poster: null, card: null }
 /** 实际生效的归一化偏移（可能被边框夹紧），供拖拽结束后同步状态 */
 const effective = { art: { x: 0, y: 0 }, card: { x: 0, y: 0 } }
+/** 上一帧海报的尺寸度量：归一化可移动上限由它推导（不依赖重绘即可返回） */
+const metrics = { poster: null, card: null }
 const busy = ref(false)
 const failed = ref(false)
 let drawVersion = 0
@@ -253,6 +255,7 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
 
     goldStroke(x0, y0, side, side, radius)
     rects.poster = { x: x0, y: y0, w: side, h: side }
+    metrics.poster = { boxW: side, boxH: side, dw: side, dh: side }
     effective.art.x = art.x || 0
     effective.art.y = art.y || 0
     return
@@ -264,9 +267,11 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
   const dw = posterImg.width * k
   const dh = posterImg.height * k
 
-  // 关键：位移被夹紧在相纸内 —— 图片小于相纸时不可移动，大于相纸时最多移到边
-  const maxX = Math.max(0, (dw - boxW) / 2)
-  const maxY = Math.max(0, (dh - boxH) / 2)
+  // 位移限制采用「整块不许越出相纸」：
+  // 图片比相纸窄 → 可在相纸内左右滑动（另一侧留白）；
+  // 图片比相纸宽 → 只能在溢出范围内移动，避免露出空白边。
+  const maxX = Math.abs(boxW - dw) / 2
+  const maxY = Math.abs(boxH - dh) / 2
   const offX = clamp((art.x || 0) * (boxW / 2), -maxX, maxX)
   const offY = clamp((art.y || 0) * (boxH / 2), -maxY, maxY)
   const cx = artInset + boxW / 2 + offX
@@ -276,6 +281,7 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
   ctx.drawImage(posterImg, cx - dw / 2, cy - dh / 2, dw, dh)
   ctx.restore()
   rects.poster = { x: artInset, y: artTop, w: boxW, h: boxH }
+  metrics.poster = { boxW, boxH, dw, dh }
 
   effective.art.x = maxX ? offX / (boxW / 2) : 0
   effective.art.y = maxY ? offY / (boxH / 2) : 0
@@ -314,6 +320,7 @@ function drawArt(ctx, cfgV, L, posterImg, cardImg) {
     goldStroke(px, py, cw, cw, radius * 0.7, 0.75)
 
     rects.card = { x: px, y: py, w: cw, h: cw }
+    metrics.card = { boxW, boxH, cw }
     effective.card.x = cardCfg.x || 0
     effective.card.y = cardCfg.y || 0
   }
@@ -400,12 +407,27 @@ function hitTest(x, y) {
 const rectOf = (target) => rects[target] || null
 const effectiveOffsets = () => ({ art: { ...effective.art }, card: { ...effective.card } })
 
+/**
+ * 归一化可移动上限：0 表示该方向被相纸边界锁死。
+ * 海报按「溢出量 / 半画框」换算（= 尺寸比 - 1），卡牌的位置映射本身就落在框内。
+ */
+function limits(target) {
+  if (target === 'card') return { x: 1, y: 1 }
+  const m = metrics.poster
+  if (!m) return { x: 0, y: 0 }
+  return {
+    x: Math.abs(1 - m.dw / m.boxW),
+    y: Math.abs(1 - m.dh / m.boxH),
+  }
+}
+
 defineExpose({
   exportBlob,
   redraw: draw,
   hitTest,
   rectOf,
   effectiveOffsets,
+  limits,
   drawCount: () => drawCount,
   dims: () => ({ width: cfg.value.width, height: cfg.value.height }),
 })

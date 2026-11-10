@@ -102,6 +102,8 @@ function resetAll() {
 /* ---------- 立绘取景：拖拽 + 滑块 ---------- */
 let drag = null
 const clamp1 = (v) => Math.max(-1, Math.min(1, +v.toFixed(3)))
+/** 按画布给出的可移动上限夹紧（limit=0 时该方向锁死） */
+const clampLimit = (v, limit) => Math.max(-limit, Math.min(limit, +v.toFixed(3)))
 
 function onPointerDown(e) {
   const cv = previewRef.value?.querySelector('canvas')
@@ -140,7 +142,8 @@ function onPointerMove(e) {
   if (!drag) return
   const dx = ((e.clientX - drag.startX) * drag.cssScale) / (drag.w / 2)
   const dy = ((e.clientY - drag.startY) * drag.cssScale) / (drag.h / 2)
-  pendingMove = { x: clamp1(drag.ox + dx), y: clamp1(drag.oy + dy) }
+  const lim = canvasRef.value?.limits?.(drag.target) || { x: 1, y: 1 }
+  pendingMove = { x: clampLimit(drag.ox + dx, lim.x), y: clampLimit(drag.oy + dy, lim.y) }
   // 一帧只回写一次状态：pointermove 可达 120Hz，逐次写会连带触发侧栏重渲染
   if (moveFrame) return
   moveFrame = requestAnimationFrame(() => {
@@ -159,15 +162,6 @@ function onPointerUp() {
     store.x = pendingMove.x
     store.y = pendingMove.y
     pendingMove = null
-  }
-  // 画布会按相纸边界夹紧位移，这里把生效值同步回状态，
-  // 否则滑块会停在越界值上，回拖时出现「死区」
-  if (drag && canvasRef.value?.effectiveOffsets) {
-    const e = canvasRef.value.effectiveOffsets()
-    art.x = e.art.x
-    art.y = e.art.y
-    cardArt.x = e.card.x
-    cardArt.y = e.card.y
   }
   drag = null
 }
@@ -243,6 +237,25 @@ function onCancel(e) {
   e.preventDefault()
   close()
 }
+
+watch(
+  [() => art.scale, () => cardArt.scale, () => artMode.value, () => size.w, () => size.h],
+  async () => {
+    await nextTick()
+    requestAnimationFrame(() => {
+      const lp = canvasRef.value?.limits?.('poster')
+      const lc = canvasRef.value?.limits?.('card')
+      if (lp) {
+        art.x = clampLimit(art.x, lp.x)
+        art.y = clampLimit(art.y, lp.y)
+      }
+      if (lc) {
+        cardArt.x = clampLimit(cardArt.x, lc.x)
+        cardArt.y = clampLimit(cardArt.y, lc.y)
+      }
+    })
+  }
+)
 
 watch(
   () => props.open,
