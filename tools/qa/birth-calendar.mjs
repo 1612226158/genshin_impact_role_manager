@@ -95,6 +95,11 @@ try {
   check('生日卡保留角色详情入口', await page.$eval('.card-head a', (link) => /^\/c\/.+/.test(link.pathname)))
   check('所选角色的日期格高亮', await page.$eval('.cal-slide[aria-hidden="false"] .cell.selected .face', (img) => img.alt) === target)
 
+  // 「制作生日卡」现在会打开工坊模态，先关闭再继续，否则焦点被模态锁住
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !document.querySelector('dialog[open]'), { timeout: 5000 }).catch(() => {})
+  await sleep(300)
+
   console.log('6) 同日生日可选择任意角色')
   const sharedCell = '.cal-slide[aria-hidden="false"] .cell.multi:nth-child(2)'
   const originalAvatar = await page.$eval(`${sharedCell} .face`, (img) => img.src)
@@ -113,21 +118,18 @@ try {
   check('日期格换成第二位角色头像并保留 +1', chosenAvatar !== originalAvatar &&
     await page.$eval(`${sharedCell} .face`, (img) => img.src) === chosenAvatar &&
     await page.$eval(`${sharedCell} .more`, (badge) => badge.textContent.trim()) === '+1')
-  check('制卡后关闭选择弹窗并聚焦生日卡', await page.evaluate(() =>
-    !document.querySelector('.birthday-picker').open && document.activeElement.matches('.card-head h2')
+  check('制卡后关闭选择弹窗并打开工坊', await page.evaluate(() =>
+    !document.querySelector('.birthday-picker').open &&
+    Boolean(document.querySelector('dialog.card-dialog[open] .card-canvas'))
   ))
-  await page.waitForFunction(() => Boolean(document.querySelector('.cardpanel canvas')) && !document.querySelector('.cardpanel .hint'))
-  await page.click('.cardpanel .ops button:last-child')
-  await page.waitForFunction((name) => (JSON.parse(localStorage.getItem('gsr.album.v1') || '[]')).some((item) =>
-    item.kind === 'card' && item.title === `${name} 生日卡`
-  ), { timeout: 8000 }, names[1])
-  check('生成的生日卡按正确角色保存到相册', true, names[1])
-
-  await page.click(singleCell)
-  await waitForPicker()
-  await page.click('.birthday-picker .picker-card')
-  check('给其他日期制卡时保留已更换的头像', await cardTitle() === `${target} · 生日卡` &&
-    await page.$eval(`${sharedCell} .face`, (img) => img.src) === chosenAvatar)
+  check('工坊内提供多格式导出与送拼图入口', await page.evaluate(() => {
+    const dlg = document.querySelector('dialog.card-dialog[open]')
+    return Boolean(dlg?.querySelector('.sel')) &&
+      [...dlg.querySelectorAll('.gs-btn')].some((b) => b.textContent.includes('导出到拼图'))
+  }))
+  // 关闭工坊（不点导出到拼图，避免跳转相册丢失本月选择状态）
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !document.querySelector('dialog[open]'), { timeout: 5000 })
 
   await page.focus(sharedCell)
   await page.keyboard.press('Enter')

@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
-import BirthdayCardCanvas from '@/components/BirthdayCardCanvas.vue'
+import BirthdayCardModal from '@/components/BirthdayCardModal.vue'
 import BirthdayCalendar from '@/components/BirthdayCalendar.vue'
 import ElementBadge from '@/components/ElementBadge.vue'
 import StyledSelect from '@/components/StyledSelect.vue'
@@ -218,12 +218,7 @@ const upcoming = computed(() => {
 })
 
 /* ---------- 生日卡 ---------- */
-const CARD_TEMPLATES = [
-  { value: 'portrait', label: '竖版 4:5 · 1080×1350' },
-  { value: 'square', label: '方版 1:1 · 1080×1080' },
-]
 const selectedId = ref('')
-const template = ref('portrait')
 const greeting = ref('')
 
 const selected = computed(() => store.get(selectedId.value) || queryResults.value.all[0] || null)
@@ -251,50 +246,14 @@ onMounted(() => {
   }
 })
 
-const cardRef = ref(null)
-const cardHeading = ref(null)
-const saving = ref(false)
+const cardOpen = ref(false)
 
-async function downloadCard() {
-  const character = selected.value
-  if (!character) {
+function openCard() {
+  if (!selected.value) {
     toast.warn('先选择一个角色')
     return
   }
-  const blob = await cardRef.value?.exportBlob()
-  if (!blob) {
-    toast.err('生成失败，请稍后重试')
-    return
-  }
-  const el = document.createElement('a')
-  const url = URL.createObjectURL(blob)
-  el.href = url
-  el.download = `原神-${character.name}-生日卡.png`
-  document.body.appendChild(el)
-  el.click()
-  el.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 2000)
-  toast.ok('生日卡已下载')
-}
-
-async function saveCard() {
-  const character = selected.value
-  if (!character) return
-  saving.value = true
-  try {
-    const blob = await cardRef.value?.exportBlob()
-    if (!blob) throw new Error('empty')
-    await album.addCard(blob, {
-      title: `${character.name} 生日卡`,
-      characterId: character.id,
-      kind: 'card',
-    })
-    toast.ok('已保存到相册')
-  } catch {
-    toast.err('保存失败，可能是存储空间不足')
-  } finally {
-    saving.value = false
-  }
+  cardOpen.value = true
 }
 
 function selectChar(c) {
@@ -310,8 +269,7 @@ async function makeBirthdayCard(c) {
   closePicker()
   selectChar(c)
   await nextTick()
-  cardHeading.value?.focus({ preventScroll: true })
-  cardHeading.value?.scrollIntoView({ block: 'nearest', behavior: motionOff() ? 'instant' : 'smooth' })
+  cardOpen.value = true
 }
 
 function avatarOf(c) {
@@ -452,35 +410,28 @@ function avatarOf(c) {
       <aside class="side">
         <div class="panel gs-panel cardpanel">
           <header class="phead card-head">
-            <h2 ref="cardHeading" tabindex="-1">{{ selected ? `${selected.name} · 生日卡` : '生日卡' }}</h2>
+            <h2>{{ selected ? `${selected.name} · 生日卡` : '生日卡' }}</h2>
             <RouterLink v-if="selected" class="mini-btn" :to="`/c/${selected.id}`">角色详情</RouterLink>
           </header>
 
-          <BirthdayCardCanvas
-            v-if="selected"
-            ref="cardRef"
-            :character="selected"
-            :template="template"
-            :greeting="greeting"
-          />
-          <p v-else class="none">先在上面选择一个角色。</p>
-
-          <StyledSelect v-model="template" :options="CARD_TEMPLATES" label="模板" />
-
-          <label class="fld">
-            <span>祝贺语（最多 40 字）</span>
-            <textarea v-model="greeting" rows="2" maxlength="40" />
-          </label>
-
-          <div class="ops">
-            <button type="button" class="gs-btn primary" @click="downloadCard">下载 PNG</button>
-            <button type="button" class="gs-btn" :disabled="saving" @click="saveCard">
-              {{ saving ? '保存中…' : '保存到相册' }}
+          <div class="card-launch">
+            <p class="launch-row">
+              <span class="launch-name">{{ selected ? selected.name : '未选择角色' }}</span>
+              <span v-if="selected" class="launch-meta">{{ selected.element || '无' }} · {{ selected.birthday || '—' }}</span>
+            </p>
+            <p class="launch-desc">
+              在工坊里可自由切换画幅（1:1 / 3:4 / 4:3 / 任意比例）、编辑文案与装饰、拖拽立绘取景，
+              并导出 PNG / JPEG / WebP（含 2× 高清），或直接送进相册拼图。
+            </p>
+            <button type="button" class="gs-btn primary" :disabled="!selected" @click="openCard">
+              打开生日卡工坊
             </button>
           </div>
         </div>
       </aside>
     </div>
+
+    <BirthdayCardModal v-model:open="cardOpen" :character="selected" :greeting="greeting" />
 
     <dialog ref="picker" class="gs-panel birthday-picker" aria-labelledby="birthday-picker-title" @cancel.prevent="closePicker">
       <template v-if="pickedDate">
@@ -886,6 +837,38 @@ function avatarOf(c) {
 .side {
   position: sticky;
   top: 78px;
+}
+
+.card-launch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 6px;
+}
+
+.launch-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.launch-name {
+  font-family: var(--gs-font-display);
+  font-size: 20px;
+  color: var(--gs-ink);
+}
+
+.launch-meta {
+  font-size: 12px;
+  color: var(--gs-ink-3);
+}
+
+.launch-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--gs-ink-3);
 }
 
 .cardpanel {

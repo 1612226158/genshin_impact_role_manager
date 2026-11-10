@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/PageHead.vue'
 import CollageEditor from '@/components/CollageEditor.vue'
 import ArtImage from '@/components/ArtImage.vue'
@@ -10,6 +11,8 @@ import { useToastStore } from '@/stores/toast'
 import { useAlbumUrls } from '@/composables/useAlbumUrls'
 
 const album = useAlbumStore()
+const route = useRoute()
+const router = useRouter()
 const toast = useToastStore()
 
 const urls = useAlbumUrls(computed(() => album.list))
@@ -34,11 +37,26 @@ const galleryColumns = computed(() => {
   return columns
 })
 let galleryObserver
-onMounted(() => {
+onMounted(async () => {
   galleryObserver = new ResizeObserver(([entry]) => {
     columnCount.value = Math.max(2, Math.min(5, Math.floor((entry.contentRect.width + 14) / 199)))
   })
   galleryObserver.observe(galleryRef.value)
+
+  // 生日卡「导出到拼图」跳转而来：把该媒体直接放进拼图第一个空位
+  const pick = String(route.query.pick || '')
+  if (pick) {
+    await nextTick()
+    const item = album.get(pick)
+    if (item && !selected.value.includes(pick)) {
+      const next = [...selected.value]
+      const slot = next.findIndex((s) => !s)
+      if (slot >= 0) next[slot] = pick
+      else next.push(pick)
+      selected.value = next
+    }
+    router.replace({ path: '/album' })
+  }
 })
 onBeforeUnmount(() => galleryObserver?.disconnect())
 
