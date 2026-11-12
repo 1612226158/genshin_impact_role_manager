@@ -140,6 +140,15 @@ try {
     await page.evaluate(() => JSON.parse(localStorage.getItem('gsr.album.v1') || '[]').length > 0)
   )
 
+  // 标签页图标：必须存在且能取到（曾在诊断期间被注释掉）
+  const favicon = await page.evaluate(async () => {
+    const link = document.querySelector('link[rel="icon"]')
+    if (!link) return { ok: false, reason: 'no link' }
+    const res = await fetch(link.href)
+    return { ok: res.ok, href: link.href.split('/').pop(), status: res.status }
+  })
+  check('标签图标已配置且可访问', favicon.ok && favicon.href === 'favicon.ico', JSON.stringify(favicon))
+
   // 清理测试数据
   await page.evaluate(() => {
     for (const k of ['gsr.overrides.v1', 'gsr.customs.v1', 'gsr.history.v1', 'gsr.album.v1']) {

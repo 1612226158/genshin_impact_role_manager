@@ -2,9 +2,10 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <!-- 诊断期间移除：theme-color 参与 Edge 窗口框架着色、favicon 涉及标签页绘制，
-         两者是 bare.html（正常）与应用页（异常）仅存的文档级差异 -->
-    <!-- <link rel="icon" type="image/svg+xml" href="./favicon.svg" /> -->
+    <!-- favicon 曾在 Edge 窗口故障诊断期间移除（它参与标签页绘制）；确认问题与窗口管理有关后，
+         2026-11-12 按需求恢复为根目录提供的 favicon.ico（16/32/48 多尺寸）。
+         theme-color 仍保持注释，避免再次干扰窗口框架着色。 -->
+    <link rel="icon" type="image/x-icon" href="%BASE_URL%favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- <meta name="theme-color" content="#071521" /> -->
     <meta
